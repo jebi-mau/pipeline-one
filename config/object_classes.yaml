@@ -1,0 +1,202 @@
+# Predefined Object Classes for SAM 3
+# Each class defines a text prompt for SAM 3 segmentation
+
+presets:
+  # Vehicles
+  - id: car
+    name: Car
+    prompt: "car, sedan, automobile, vehicle"
+    color: "#FF6B6B"
+    kitti_type: Car
+
+  - id: truck
+    name: Truck
+    prompt: "truck, lorry, semi-truck, pickup truck"
+    color: "#4ECDC4"
+    kitti_type: Truck
+
+  - id: van
+    name: Van
+    prompt: "van, minivan, cargo van, delivery van"
+    color: "#45B7D1"
+    kitti_type: Van
+
+  - id: bus
+    name: Bus
+    prompt: "bus, public transport bus, school bus, coach"
+    color: "#98D8C8"
+    kitti_type: Truck
+
+  # Mining Equipment (JEBI-specific)
+  - id: haul_truck
+    name: Haul Truck
+    prompt: "mining haul truck, dump truck, large yellow truck"
+    color: "#FFD93D"
+    kitti_type: Truck
+
+  - id: excavator
+    name: Excavator
+    prompt: "excavator, digger, backhoe, construction excavator"
+    color: "#FF9F1C"
+    kitti_type: Misc
+
+  - id: loader
+    name: Loader
+    prompt: "wheel loader, front loader, bucket loader"
+    color: "#E8871E"
+    kitti_type: Misc
+
+  - id: dozer
+    name: Dozer
+    prompt: "bulldozer, dozer, crawler dozer"
+    color: "#C77B30"
+    kitti_type: Misc
+
+  - id: water_truck
+    name: Water Truck
+    prompt: "water truck, water tanker, dust suppression truck"
+    color: "#2EC4B6"
+    kitti_type: Truck
+
+  # Personnel
+  - id: person
+    name: Pedestrian
+    prompt: "person, pedestrian, human, people walking"
+    color: "#96CEB4"
+    kitti_type: Pedestrian
+
+  - id: worker_ppe
+    name: Worker with PPE
+    prompt: "worker wearing hard hat, construction worker with safety vest, mining worker with PPE"
+    color: "#88D8B0"
+    kitti_type: Pedestrian
+
+  - id: worker_no_ppe
+    name: Worker without PPE
+    prompt: "person without hard hat, worker without safety equipment"
+    color: "#FF6B6B"
+    kitti_type: Pedestrian
+
+  # Cyclists
+  - id: cyclist
+    name: Cyclist
+    prompt: "cyclist, person on bicycle, bike rider"
+    color: "#FFEAA7"
+    kitti_type: Cyclist
+
+  - id: motorcycle
+    name: Motorcycle
+    prompt: "motorcycle, motorbike, scooter"
+    color: "#DDA0DD"
+    kitti_type: Cyclist
+
+  # Equipment
+  - id: tire
+    name: Tire
+    prompt: "large tire, mining tire, haul truck tire"
+    color: "#636E72"
+    kitti_type: Misc
+
+  - id: bucket
+    name: Bucket
+    prompt: "excavator bucket, loader bucket, digging bucket"
+    color: "#B2BEC3"
+    kitti_type: Misc
+
+  - id: get
+    name: GET (Ground Engaging Tool)
+    prompt: "ground engaging tool, bucket teeth, digging teeth"
+    color: "#74B9FF"
+    kitti_type: Misc
+
+  # Infrastructure
+  - id: berm
+    name: Berm
+    prompt: "safety berm, road berm, earthen barrier"
+    color: "#A0522D"
+    kitti_type: Misc
+
+  - id: stockpile
+    name: Stockpile
+    prompt: "ore stockpile, material pile, aggregate pile"
+    color: "#8B7355"
+    kitti_type: Misc
+
+  - id: building
+    name: Building
+    prompt: "building, structure, facility, warehouse"
+    color: "#95A5A6"
+    kitti_type: Misc
+
+  - id: power_line
+    name: Power Line
+    prompt: "power line, electrical cable, overhead wire, transmission line"
+    color: "#E74C3C"
+    kitti_type: Misc
+
+  # Safety Items
+  - id: cone
+    name: Traffic Cone
+    prompt: "traffic cone, safety cone, orange cone"
+    color: "#F39C12"
+    kitti_type: Misc
+
+  - id: barrier
+    name: Barrier
+    prompt: "road barrier, safety barrier, concrete barrier"
+    color: "#7F8C8D"
+    kitti_type: Misc
+
+  - id: sign
+    name: Sign
+    prompt: "traffic sign, road sign, warning sign, speed limit sign"
+    color: "#F7DC6F"
+    kitti_type: Misc
+
+  - id: light_tower
+    name: Light Tower
+    prompt: "light tower, portable light, construction lighting"
+    color: "#FFF59D"
+    kitti_type: Misc
+
+# Size priors for 3D bounding box validation (meters)
+size_priors:
+  car:
+    length: [3.5, 5.5]
+    width: [1.5, 2.2]
+    height: [1.3, 1.8]
+
+  truck:
+    length: [5.0, 12.0]
+    width: [2.0, 2.8]
+    height: [2.5, 4.0]
+
+  haul_truck:
+    length: [8.0, 16.0]
+    width: [4.0, 8.0]
+    height: [4.0, 8.0]
+
+  excavator:
+    length: [6.0, 15.0]
+    width: [2.5, 5.0]
+    height: [3.0, 6.0]
+
+  person:
+    length: [0.3, 0.8]
+    width: [0.3, 0.8]
+    height: [1.4, 2.0]
+
+  cyclist:
+    length: [1.5, 2.5]
+    width: [0.5, 1.0]
+    height: [1.5, 2.0]
+
+  tire:
+    length: [1.0, 4.0]
+    width: [0.5, 2.0]
+    height: [1.0, 4.0]
+
+  cone:
+    length: [0.2, 0.5]
+    width: [0.2, 0.5]
+    height: [0.5, 1.0]

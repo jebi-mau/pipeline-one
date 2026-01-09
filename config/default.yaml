@@ -1,0 +1,196 @@
+# SVO2-SAM3 Analyzer Default Configuration
+# This file contains default settings that can be overridden via environment variables
+
+app:
+  name: "SVO2-SAM3 Analyzer"
+  version: "1.0.0"
+  description: "Multi-Camera SVO2 Processing with SAM 3 Object Detection"
+  debug: false
+
+# Data paths (relative to project root or absolute)
+paths:
+  data_root: "./data"
+  svo2_directory: "${paths.data_root}/svo2"
+  output_directory: "${paths.data_root}/output"
+  models_directory: "${paths.data_root}/models"
+  cache_directory: "${paths.data_root}/cache"
+
+# Database configuration
+database:
+  driver: "postgresql+asyncpg"
+  host: "localhost"
+  port: 5432
+  name: "svo2_analyzer"
+  pool_size: 5
+  max_overflow: 10
+  echo: false
+
+# Redis configuration
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+  password: null
+  socket_timeout: 5
+  connection_pool_size: 10
+
+# Celery configuration
+celery:
+  broker_url: "redis://localhost:6379/0"
+  result_backend: "redis://localhost:6379/1"
+  task_default_queue: "default"
+  gpu_queue: "gpu"
+  task_serializer: "json"
+  result_serializer: "json"
+  accept_content: ["json"]
+  task_track_started: true
+  task_time_limit: 3600  # 1 hour
+  worker_prefetch_multiplier: 1
+
+# SAM 3 model configuration
+sam3:
+  # Model variant: sam3_hiera_tiny, sam3_hiera_small, sam3_hiera_base, sam3_hiera_large
+  default_model: "sam3_hiera_large"
+  model_path: "${paths.models_directory}/sam3"
+
+  # Default inference parameters
+  defaults:
+    confidence_threshold: 0.5
+    iou_threshold: 0.7
+    mask_threshold: 0.5
+    batch_size: 8
+    max_detections_per_frame: 100
+
+  # Model variants with their characteristics
+  variants:
+    sam3_hiera_tiny:
+      size_mb: 400
+      vram_required_gb: 4
+      recommended_for: "Quick testing"
+
+    sam3_hiera_small:
+      size_mb: 900
+      vram_required_gb: 8
+      recommended_for: "Balanced performance"
+
+    sam3_hiera_base:
+      size_mb: 1800
+      vram_required_gb: 12
+      recommended_for: "Production (default)"
+
+    sam3_hiera_large:
+      size_mb: 2400
+      vram_required_gb: 16
+      recommended_for: "Maximum accuracy"
+
+  # GPU optimization settings
+  optimization:
+    use_torch_compile: true
+    compile_mode: "reduce-overhead"
+    precision: "fp16"  # fp32, fp16, bf16
+    channels_last: true
+    enable_tf32: true
+
+# SVO2 extraction configuration
+extraction:
+  # Depth mode: NEURAL, ULTRA, QUALITY, PERFORMANCE
+  depth_mode: "NEURAL"
+
+  # Output formats
+  image_format: "png"
+  depth_format: "png16"  # 16-bit PNG in millimeters
+  point_cloud_format: "ply"
+
+  # Data to extract
+  extract_left_rgb: true
+  extract_right_rgb: true
+  extract_depth: true
+  extract_point_cloud: true
+  extract_imu: true
+
+  # Frame processing
+  frame_skip: 1  # Process every Nth frame (1 = all frames)
+
+# Object tracking configuration
+tracking:
+  enabled: true
+  algorithm: "bytetrack"
+
+  bytetrack:
+    track_thresh: 0.5
+    track_buffer: 30
+    match_thresh: 0.8
+    min_box_area: 10
+    use_3d_iou: true
+
+# 3D reconstruction configuration
+reconstruction:
+  enabled: true
+
+  # Point cloud filtering
+  min_points_per_object: 100
+  outlier_removal:
+    enabled: true
+    nb_neighbors: 20
+    std_ratio: 2.0
+
+  # Bounding box estimation
+  bbox_method: "pca"  # pca, aabb, obb
+  use_size_priors: true
+
+# Export configuration
+export:
+  # KITTI format options
+  kitti:
+    enabled: true
+    include_depth: true
+    include_velodyne: true
+    include_oxts: true
+    include_calib: true
+
+  # COCO format options
+  coco:
+    enabled: true
+    include_segmentation: true
+    include_keypoints: false
+
+  # JSON format options
+  json:
+    enabled: true
+    include_point_clouds: false
+    compress: true
+    pretty_print: false
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/svo2_analyzer.log"
+  max_size_mb: 100
+  backup_count: 5
+
+  # Per-module log levels
+  modules:
+    uvicorn.access: "WARNING"
+    httpx: "WARNING"
+    sqlalchemy.engine: "WARNING"
+
+# API configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: false
+  workers: 1
+
+  # CORS settings
+  cors:
+    origins:
+      - "http://localhost:3000"
+    allow_credentials: true
+    allow_methods: ["*"]
+    allow_headers: ["*"]
+
+# Frontend configuration
+frontend:
+  host: "0.0.0.0"
+  port: 3000
