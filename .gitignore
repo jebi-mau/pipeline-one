@@ -103,3 +103,10 @@ dump.rdb
 
 # Docker
 *.pid
+
+# Data directories (project specific)
+273/
+svo2_data/
+
+# Python wheel files
+*.whl

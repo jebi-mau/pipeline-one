@@ -44,17 +44,23 @@ class JobService:
         self.db.add(config)
         await self.db.flush()
 
+        # Get stages to run from config (default to all stages)
+        stages_to_run = job_data.config.stages_to_run or [
+            "extraction", "segmentation", "reconstruction", "tracking"
+        ]
+
         # Create job
         job = ProcessingJob(
             name=job_data.name,
             input_paths=job_data.input_paths,
             output_directory=job_data.output_directory,
             config_id=config.id,
+            stages_to_run=stages_to_run,
         )
         self.db.add(job)
         await self.db.flush()
 
-        logger.info(f"Created job {job.id}: {job.name}")
+        logger.info(f"Created job {job.id}: {job.name} with stages {stages_to_run}")
         return self._to_response(job, config)
 
     async def get_job(self, job_id: UUID) -> JobResponse | None:
@@ -138,15 +144,21 @@ class JobService:
             "output_directory": job.output_directory,
         }
 
+        # Get stages to run from job
+        stages_to_run = job.stages_to_run or [
+            "extraction", "segmentation", "reconstruction", "tracking"
+        ]
+
         # Trigger Celery pipeline task
         run_pipeline.delay(
             str(job_id),
             job.input_paths,
             object_classes,
             pipeline_config,
+            stages_to_run,
         )
 
-        logger.info(f"Started job {job_id} - dispatched to Celery")
+        logger.info(f"Started job {job_id} with stages {stages_to_run} - dispatched to Celery")
         return JobStatusUpdate(id=job_id, status="running", message="Job started")
 
     async def pause_job(self, job_id: UUID) -> JobStatusUpdate | None:
@@ -213,6 +225,75 @@ class JobService:
         logger.info(f"Cancelled job {job_id}")
         return JobStatusUpdate(id=job_id, status="cancelled", message="Job cancelled")
 
+    async def restart_job(self, job_id: UUID) -> JobStatusUpdate | None:
+        """Restart a failed or cancelled job."""
+        result = await self.db.execute(
+            select(ProcessingJob, JobConfig)
+            .join(JobConfig)
+            .where(ProcessingJob.id == job_id)
+        )
+        row = result.first()
+        if row is None:
+            return None
+
+        job, config = row[0], row[1]
+
+        if job.status not in ("failed", "cancelled"):
+            return JobStatusUpdate(
+                id=job_id,
+                status=job.status,
+                message=f"Cannot restart job in {job.status} status",
+            )
+
+        # Reset job state
+        job.status = "running"
+        job.current_stage = 1
+        job.progress = 0.0
+        job.processed_frames = 0
+        job.error_message = None
+        job.error_stage = None
+        job.started_at = datetime.utcnow()
+        job.completed_at = None
+
+        await self.db.commit()
+
+        # Build object classes from config
+        object_classes = [
+            {"class_id": cls, "class_name": cls.replace("_", " ").title(), "text": cls}
+            for cls in config.object_class_ids
+        ]
+
+        # Build pipeline config
+        pipeline_config = {
+            "extraction": {"frame_skip": config.frame_skip},
+            "sam3": {
+                "model_variant": config.sam3_model_variant,
+                "confidence_threshold": config.sam3_confidence_threshold,
+                "iou_threshold": config.sam3_iou_threshold,
+                "batch_size": config.sam3_batch_size,
+            },
+            "reconstruction": {"enabled": config.export_3d_data},
+            "tracking": {"enabled": config.enable_tracking},
+            "output_directory": job.output_directory,
+        }
+
+        # Get stages to run from job
+        stages_to_run = job.stages_to_run or [
+            "extraction", "segmentation", "reconstruction", "tracking"
+        ]
+
+        # Trigger Celery pipeline task
+        run_pipeline.delay(
+            str(job_id),
+            job.input_paths,
+            object_classes,
+            pipeline_config,
+            stages_to_run,
+        )
+
+        logger.info(f"Restarted job {job_id} with stages {stages_to_run}")
+        return JobStatusUpdate(id=job_id, status="running", message="Job restarted")
+
     async def get_job_results(self, job_id: UUID) -> JobResultsResponse | None:
         """Get results for a completed job."""
         result = await self.db.execute(
@@ -255,6 +336,11 @@ class JobService:
 
     def _to_response(self, job: ProcessingJob, config: JobConfig) -> JobResponse:
         """Convert job model to response schema."""
+        # Get stages_to_run with default fallback
+        stages_to_run = job.stages_to_run or [
+            "extraction", "segmentation", "reconstruction", "tracking"
+        ]
+
         return JobResponse(
             id=job.id,
             name=job.name,
@@ -276,7 +362,9 @@ class JobService:
                 frame_skip=config.frame_skip,
                 enable_tracking=config.enable_tracking,
                 export_3d_data=config.export_3d_data,
+                stages_to_run=stages_to_run,
             ),
+            stages_to_run=stages_to_run,
             error_message=job.error_message,
             created_at=job.created_at,
             started_at=job.started_at,

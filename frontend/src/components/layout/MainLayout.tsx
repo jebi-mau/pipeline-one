@@ -1,15 +1,20 @@
+/**
+ * Shalom - Main Layout component
+ */
+
 import { Outlet, NavLink } from 'react-router-dom'
 import {
   HomeIcon,
-  FolderIcon,
   Cog6ToothIcon,
   DocumentDuplicateIcon,
+  CircleStackIcon,
 } from '@heroicons/react/24/outline'
 import { clsx } from 'clsx'
 
 const navigation = [
   { name: 'Home', href: '/', icon: HomeIcon },
   { name: 'Jobs', href: '/jobs', icon: DocumentDuplicateIcon },
+  { name: 'Data', href: '/data', icon: CircleStackIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ]
 
@@ -20,8 +25,8 @@ export default function MainLayout() {
       <div className="w-64 flex flex-col bg-secondary-800 border-r border-secondary-700">
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-secondary-700">
-          <span className="text-xl font-bold text-primary-500">SVO2-SAM3</span>
-          <span className="ml-2 text-sm text-secondary-400">Analyzer</span>
+          <span className="text-xl font-bold text-primary-500">Shalom</span>
+          <span className="ml-2 text-sm text-secondary-400">SVO2-SAM3</span>
         </div>
 
         {/* Navigation */}
@@ -59,7 +64,7 @@ export default function MainLayout() {
         {/* Header */}
         <header className="h-16 flex items-center justify-between px-6 bg-secondary-800 border-b border-secondary-700">
           <h1 className="text-lg font-semibold text-secondary-100">
-            SVO2-SAM3 Analyzer
+            Shalom - SVO2-SAM3 Analyzer
           </h1>
           <div className="flex items-center space-x-4">
             <span className="text-sm text-secondary-400">

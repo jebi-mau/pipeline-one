@@ -124,6 +124,21 @@ async def cancel_job(
     return result
 
 
+@router.post("/{job_id}/restart", response_model=JobStatusUpdate)
+async def restart_job(
+    job_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> JobStatusUpdate:
+    """
+    Restart a failed or cancelled job.
+    """
+    service = JobService(db)
+    result = await service.restart_job(job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return result
+
+
 @router.get("/{job_id}/results", response_model=JobResultsResponse)
 async def get_job_results(
     job_id: UUID,

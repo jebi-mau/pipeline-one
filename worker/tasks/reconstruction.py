@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from worker.celery_app import app
+from worker.tasks.extraction import update_job_progress
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,13 @@ def run_reconstruction(
     method = BBoxMethod(config.get("method", "pca"))
     use_size_priors = config.get("use_size_priors", True)
 
+    # Get progress range from config (default to old behavior)
+    progress_range = config.get("progress_range", (75, 90))
+    range_start, range_end = progress_range
+
     # Progress callback
     def progress_callback(current: int, total: int, message: str) -> None:
+        # Update Celery state
         self.update_state(
             state="PROGRESS",
             meta={
@@ -59,6 +65,20 @@ def run_reconstruction(
                 "total": total,
                 "message": message,
             },
+        )
+
+        # Update database progress (stage 3 = reconstruction)
+        # Calculate overall progress based on assigned range
+        stage_progress = (current / total * 100) if total > 0 else 0
+        range_size = range_end - range_start
+        overall_progress = range_start + (stage_progress / 100 * range_size)
+
+        update_job_progress(
+            job_id=job_id,
+            stage=3,
+            progress=overall_progress,
+            stage_progress=stage_progress,
+            processed_frames=current,
         )
 
     try:

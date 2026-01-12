@@ -240,14 +240,16 @@ class SAM3BatchProcessor:
         prompts = []
 
         for obj_class in object_classes:
+            # Support both key naming conventions (class_id/id, class_name/name)
             prompt = {
-                "class_id": obj_class.get("id", "unknown"),
-                "class_name": obj_class.get("name", "Unknown"),
+                "class_id": obj_class.get("class_id") or obj_class.get("id", "unknown"),
+                "class_name": obj_class.get("class_name") or obj_class.get("name", "Unknown"),
             }
 
-            # Add text prompt if available
-            if "prompt" in obj_class:
-                prompt["text"] = obj_class["prompt"]
+            # Add text prompt if available (check both "text" and "prompt" keys)
+            text_prompt = obj_class.get("text") or obj_class.get("prompt")
+            if text_prompt:
+                prompt["text"] = text_prompt
 
             # Add box prompt if available
             if "box" in obj_class:

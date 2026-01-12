@@ -320,7 +320,7 @@ class SVO2Reader:
             fy_right=right.fy,
             cx_right=right.cx,
             cy_right=right.cy,
-            baseline=calib.getCameraBaseline() / 1000.0,  # mm to meters
+            baseline=calib.get_camera_baseline() / 1000.0,  # mm to meters
             width=int(left.image_size.width),
             height=int(left.image_size.height),
             distortion_left=list(left.disto),

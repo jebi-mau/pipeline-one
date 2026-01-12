@@ -61,6 +61,13 @@ class ProcessingJob(Base, UUIDMixin, TimestampMixin):
     input_paths: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     output_directory: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Pipeline stages to execute
+    stages_to_run: Mapped[list[str]] = mapped_column(
+        JSONB,
+        default=["extraction", "segmentation", "reconstruction", "tracking"],
+        nullable=False
+    )
+
     # Configuration
     config_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("job_configs.id"), nullable=False

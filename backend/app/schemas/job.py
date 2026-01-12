@@ -18,6 +18,10 @@ class JobConfig(BaseModel):
     frame_skip: int = Field(default=1, ge=1, description="Process every Nth frame")
     enable_tracking: bool = True
     export_3d_data: bool = True
+    stages_to_run: list[str] = Field(
+        default=["extraction", "segmentation", "reconstruction", "tracking"],
+        description="Pipeline stages to execute"
+    )
 
 
 class JobCreate(BaseModel):
@@ -44,6 +48,9 @@ class JobResponse(BaseModel):
     input_paths: list[str]
     output_directory: str | None = None
     config: JobConfig
+    stages_to_run: list[str] = Field(
+        default=["extraction", "segmentation", "reconstruction", "tracking"]
+    )
     error_message: str | None = None
     created_at: datetime
     started_at: datetime | None = None

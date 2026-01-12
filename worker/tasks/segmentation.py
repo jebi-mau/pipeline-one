@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from worker.celery_app import app
+from worker.tasks.extraction import update_job_progress
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +73,13 @@ def run_segmentation(
         clear_cache_every=config.get("clear_cache_every", 10),
     )
 
+    # Get progress range from config (default to old behavior)
+    progress_range = config.get("progress_range", (25, 75))
+    range_start, range_end = progress_range
+
     # Progress callback
     def progress_callback(current: int, total: int, message: str) -> None:
+        # Update Celery state
         self.update_state(
             state="PROGRESS",
             meta={
@@ -82,6 +88,21 @@ def run_segmentation(
                 "total": total,
                 "message": message,
             },
+        )
+
+        # Update database progress (stage 2 = segmentation)
+        # Calculate overall progress based on assigned range
+        stage_progress = (current / total * 100) if total > 0 else 0
+        range_size = range_end - range_start
+        overall_progress = range_start + (stage_progress / 100 * range_size)
+
+        update_job_progress(
+            job_id=job_id,
+            stage=2,
+            progress=overall_progress,
+            stage_progress=stage_progress,
+            total_frames=total,
+            processed_frames=current,
         )
 
     try:

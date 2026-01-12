@@ -3,6 +3,7 @@ import MainLayout from './components/layout/MainLayout'
 import HomePage from './pages/HomePage'
 import JobsPage from './pages/JobsPage'
 import JobDetailPage from './pages/JobDetailPage'
+import DataPage from './pages/DataPage'
 import SettingsPage from './pages/SettingsPage'
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
         <Route index element={<HomePage />} />
         <Route path="jobs" element={<JobsPage />} />
         <Route path="jobs/:jobId" element={<JobDetailPage />} />
+        <Route path="data" element={<DataPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>

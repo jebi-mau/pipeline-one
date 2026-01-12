@@ -401,6 +401,11 @@ class SVO2Extractor:
         """Save IMU data to KITTI oxts format."""
         oxts = imu.to_oxts_format()
 
+        # Convert quaternion to Euler angles (roll, pitch, yaw) in radians
+        roll, pitch, yaw = self._quaternion_to_euler(
+            oxts["qw"], oxts["qx"], oxts["qy"], oxts["qz"]
+        )
+
         with open(path, "w") as f:
             # KITTI oxts format: lat lon alt roll pitch yaw vn ve vf vl vu ax ay az af al au wx wy wz wf wl wu pos_accuracy vel_accuracy
             # We use a simplified format with available data
@@ -408,9 +413,9 @@ class SVO2Extractor:
                 0.0,  # lat
                 0.0,  # lon
                 0.0,  # alt
-                0.0,  # roll
-                0.0,  # pitch
-                0.0,  # yaw
+                roll,  # roll (radians)
+                pitch,  # pitch (radians)
+                yaw,  # yaw (radians)
                 0.0,  # vn
                 0.0,  # ve
                 0.0,  # vf
@@ -434,6 +439,39 @@ class SVO2Extractor:
             f.write(" ".join(f"{v:.6f}" for v in values) + "\n")
 
         return path
+
+    def _quaternion_to_euler(
+        self, qw: float, qx: float, qy: float, qz: float
+    ) -> tuple[float, float, float]:
+        """
+        Convert quaternion to Euler angles (roll, pitch, yaw).
+
+        Args:
+            qw, qx, qy, qz: Quaternion components
+
+        Returns:
+            Tuple of (roll, pitch, yaw) in radians
+        """
+        import math
+
+        # Roll (x-axis rotation)
+        sinr_cosp = 2.0 * (qw * qx + qy * qz)
+        cosr_cosp = 1.0 - 2.0 * (qx * qx + qy * qy)
+        roll = math.atan2(sinr_cosp, cosr_cosp)
+
+        # Pitch (y-axis rotation)
+        sinp = 2.0 * (qw * qy - qz * qx)
+        if abs(sinp) >= 1:
+            pitch = math.copysign(math.pi / 2, sinp)  # Use 90 degrees if out of range
+        else:
+            pitch = math.asin(sinp)
+
+        # Yaw (z-axis rotation)
+        siny_cosp = 2.0 * (qw * qz + qx * qy)
+        cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+
+        return roll, pitch, yaw
 
     def _save_calibration(self) -> Path:
         """Save camera calibration to KITTI format."""

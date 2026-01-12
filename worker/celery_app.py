@@ -31,8 +31,8 @@ app.conf.update(
 
     # Task tracking
     task_track_started=True,
-    task_time_limit=3600,  # 1 hour max
-    task_soft_time_limit=3000,  # Soft limit at 50 minutes
+    task_time_limit=14400,  # 4 hours max (for large SVO2 files)
+    task_soft_time_limit=12600,  # Soft limit at 3.5 hours
 
     # Worker settings
     worker_prefetch_multiplier=1,  # Fair task distribution
