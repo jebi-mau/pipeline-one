@@ -1,5 +1,5 @@
 /**
- * Shalom - Configuration hooks using React Query
+ * Pipeline One - Configuration hooks using React Query
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

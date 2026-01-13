@@ -1,5 +1,5 @@
 /**
- * Shalom - Annotated Image component with bounding box overlay and mask support
+ * Pipeline One - Annotated Image component with bounding box overlay and mask support
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';
@@ -241,7 +241,8 @@ export function AnnotatedImage({
 
         // Draw label
         if (showLabels) {
-          const label = `${ann.class_name} ${(confidence * 100).toFixed(0)}%`;
+          const distanceStr = ann.distance !== null ? ` ${ann.distance.toFixed(1)}m` : '';
+          const label = `${ann.class_name} ${(confidence * 100).toFixed(0)}%${distanceStr}`;
           ctx.font = isSelected ? 'bold 12px sans-serif' : '12px sans-serif';
           const textMetrics = ctx.measureText(label);
           const labelHeight = 16;

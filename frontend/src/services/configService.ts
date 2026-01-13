@@ -1,5 +1,5 @@
 /**
- * Shalom - Configuration API service
+ * Pipeline One - Configuration API service
  */
 
 import api from './api';

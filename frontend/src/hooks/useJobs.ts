@@ -1,5 +1,5 @@
 /**
- * Shalom - Job hooks using React Query
+ * Pipeline One - Job hooks using React Query
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -20,7 +20,10 @@ export function useJobs(params?: { status?: string; limit?: number; offset?: num
   return useQuery({
     queryKey: jobKeys.list(params || {}),
     queryFn: () => jobsService.list(params),
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
+    staleTime: 10000, // Consider data fresh for 10 seconds
+    refetchInterval: 15000, // Auto-refresh every 15 seconds (reduced from 5s)
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 }
 
@@ -42,6 +45,8 @@ export function useJobResults(jobId: string | undefined) {
     queryKey: jobKeys.results(jobId!),
     queryFn: () => jobsService.getResults(jobId!),
     enabled: !!jobId,
+    staleTime: 60000, // Results don't change often - cache for 1 minute
+    retry: 2,
   });
 }
 
@@ -52,6 +57,8 @@ export function useCreateJob() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: jobKeys.lists() });
     },
+    retry: 2,
+    retryDelay: 1000,
   });
 }
 

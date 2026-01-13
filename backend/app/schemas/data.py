@@ -36,6 +36,7 @@ class AnnotationSummary(BaseModel):
     bbox_3d: BBox3D | None = None
     mask_url: str | None = None
     track_id: str | None = None
+    distance: float | None = None  # Distance in meters (center patch average)
 
 
 class FrameMetadataSummary(BaseModel):

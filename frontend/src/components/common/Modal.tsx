@@ -1,5 +1,5 @@
 /**
- * Shalom - Reusable Modal component using Headless UI
+ * Pipeline One - Reusable Modal component using Headless UI
  */
 
 import { Fragment, ReactNode } from 'react';

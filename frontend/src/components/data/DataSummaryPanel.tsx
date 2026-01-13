@@ -1,5 +1,5 @@
 /**
- * Shalom - Data Summary Panel component
+ * Pipeline One - Data Summary Panel component
  */
 
 import {

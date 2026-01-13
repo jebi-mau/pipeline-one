@@ -227,3 +227,58 @@ class DepthProjector:
         cam_points[:, 2] = points[:, 0]   # Z_zed = X_kitti
 
         return cam_points
+
+    @staticmethod
+    def calculate_center_patch_distance(
+        mask: NDArray[np.bool_],
+        depth: NDArray[np.float32],
+        patch_ratio: float = 0.10,
+        min_samples: int = 10,
+    ) -> float | None:
+        """
+        Calculate average depth from center patch of mask.
+
+        Uses a circular patch centered at the mask centroid, with area equal
+        to patch_ratio of the total mask area. This avoids edge noise from
+        depth bleeding at object boundaries.
+
+        Args:
+            mask: Boolean segmentation mask (H x W)
+            depth: Depth map in meters (H x W, float32)
+            patch_ratio: Fraction of mask area for center patch (default 10%)
+            min_samples: Minimum valid depth samples required
+
+        Returns:
+            Average depth in meters, or None if insufficient valid data
+        """
+        # Find mask pixels
+        ys, xs = np.where(mask)
+        if len(xs) == 0:
+            return None
+
+        # Calculate centroid
+        cx = xs.mean()
+        cy = ys.mean()
+
+        # Calculate center patch radius for desired area ratio
+        mask_area = mask.sum()
+        patch_area = mask_area * patch_ratio
+        patch_radius = np.sqrt(patch_area / np.pi)
+
+        # Create circular center patch mask
+        y_coords, x_coords = np.ogrid[:mask.shape[0], :mask.shape[1]]
+        distances_from_center = np.sqrt(
+            (x_coords - cx) ** 2 + (y_coords - cy) ** 2
+        )
+        center_patch = (distances_from_center <= patch_radius) & mask
+
+        # Sample depth values within the center patch
+        depth_values = depth[center_patch]
+
+        # Filter for valid (finite, positive) depth values
+        valid = np.isfinite(depth_values) & (depth_values > 0)
+
+        if valid.sum() < min_samples:
+            return None
+
+        return float(depth_values[valid].mean())

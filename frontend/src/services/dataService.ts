@@ -1,5 +1,5 @@
 /**
- * Shalom - Data API service for frame browsing and correlation
+ * Pipeline One - Data API service for frame browsing and correlation
  */
 
 import api from './api';

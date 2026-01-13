@@ -1,5 +1,6 @@
 """3D reconstruction task."""
 
+import gc
 import json
 import logging
 from pathlib import Path
@@ -9,12 +10,21 @@ import cv2
 import numpy as np
 
 from worker.celery_app import app
-from worker.tasks.extraction import update_job_progress
+from worker.db import update_job_progress
 
 logger = logging.getLogger(__name__)
 
 
-@app.task(bind=True, name="worker.tasks.reconstruction.run_reconstruction")
+@app.task(
+    bind=True,
+    name="worker.tasks.reconstruction.run_reconstruction",
+    max_retries=3,
+    default_retry_delay=60,
+    autoretry_for=(IOError, OSError, ConnectionError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
 def run_reconstruction(
     self,
     segmentation_result: dict | None,
@@ -39,11 +49,14 @@ def run_reconstruction(
     logger.info(f"Running reconstruction for job {job_id}")
 
     if segmentation_result is None:
-        return {"status": "skipped", "reason": "No segmentation results"}
+        return {"status": "skipped", "reason": "No segmentation results", "total_detections": 0}
+
+    # Preserve total_detections from segmentation stage
+    total_detections = segmentation_result.get("total_detections", 0)
 
     registries = segmentation_result.get("registries", [])
     if not registries:
-        return {"status": "skipped", "reason": "No registries to process"}
+        return {"status": "skipped", "reason": "No registries to process", "total_detections": total_detections}
 
     # Configuration
     min_points = config.get("min_points", 100)
@@ -117,10 +130,19 @@ def run_reconstruction(
 
             projector = DepthProjector(intrinsics)
 
-            # Process each frame
-            frames = list(registry.iter_frames())
-            for idx, frame in enumerate(frames):
-                progress_callback(idx, len(frames), f"Frame {frame.frame_id}")
+            # Pre-index detections by frame_id for O(1) lookup
+            frames_detections = detections_data.get("frames", {})
+            masks_dir = registry_path.parent / "detections" / "masks"
+
+            # Track if we've modified detections (to save updated file)
+            detections_modified = False
+
+            # Get total frame count for progress without loading all frames
+            frame_count = registry.frame_count
+
+            # Process each frame using iterator (memory efficient)
+            for idx, frame in enumerate(registry.iter_frames()):
+                progress_callback(idx, frame_count, f"Frame {frame.frame_id}")
 
                 # Get frame paths
                 paths = registry.get_frame_paths(frame.frame_id)
@@ -134,50 +156,69 @@ def run_reconstruction(
                 if depth is None:
                     continue
 
+                # Validate depth data
+                if depth.size == 0 or not np.any(depth > 0):
+                    del depth
+                    continue
+
                 # Convert from mm to meters if 16-bit
                 if depth.dtype == np.uint16:
                     depth = depth.astype(np.float32) / 1000.0
 
-                # Get frame detections
-                frame_dets = detections_data.get("frames", {}).get(frame.frame_id, {})
+                # Get frame detections using pre-indexed lookup
+                frame_dets = frames_detections.get(frame.frame_id, {})
                 frame_detections = frame_dets.get("detections", [])
 
-                # Load masks
-                masks_dir = registry_path.parent / "detections" / "masks"
                 bboxes_3d = []
 
                 for det_idx, det in enumerate(frame_detections):
-                    # Load mask
-                    mask_file = masks_dir / f"{frame.frame_id}_{det_idx:03d}.png"
-                    if mask_file.exists():
-                        mask = cv2.imread(str(mask_file), cv2.IMREAD_GRAYSCALE)
-                        mask = mask > 127
-                    else:
-                        # Create mask from bbox
-                        bbox = det["bbox"]
-                        mask = np.zeros(depth.shape[:2], dtype=bool)
-                        x1, y1, x2, y2 = map(int, bbox)
-                        mask[y1:y2, x1:x2] = True
+                    mask = None
+                    points = None
 
-                    # Project to 3D
-                    points = projector.project_depth_to_3d(depth, mask)
-                    if len(points) < min_points:
-                        continue
+                    try:
+                        # Load mask
+                        mask_file = masks_dir / f"{frame.frame_id}_{det_idx:03d}.png"
+                        if mask_file.exists():
+                            mask = cv2.imread(str(mask_file), cv2.IMREAD_GRAYSCALE)
+                            if mask is not None:
+                                mask = mask > 127
 
-                    # Transform to KITTI coordinates
-                    points = DepthProjector.transform_camera_to_kitti(points)
+                        if mask is None:
+                            # Create mask from bbox as fallback
+                            bbox = det["bbox"]
+                            mask = np.zeros(depth.shape[:2], dtype=bool)
+                            x1, y1, x2, y2 = map(int, bbox)
+                            mask[y1:y2, x1:x2] = True
 
-                    # Estimate bounding box
-                    bbox_3d = estimator.estimate(
-                        points,
-                        class_id=det.get("class_id", ""),
-                        class_name=det.get("class_name", ""),
-                        confidence=det.get("confidence", 1.0),
-                    )
+                        # Calculate center patch distance (10% area at mask centroid)
+                        distance = DepthProjector.calculate_center_patch_distance(mask, depth)
+                        if distance is not None:
+                            det["distance"] = round(distance, 3)
+                            detections_modified = True
 
-                    if bbox_3d is not None:
-                        bboxes_3d.append(bbox_3d.to_kitti_format())
-                        total_objects += 1
+                        # Project to 3D
+                        points = projector.project_depth_to_3d(depth, mask)
+                        if len(points) < min_points:
+                            continue
+
+                        # Transform to KITTI coordinates
+                        points = DepthProjector.transform_camera_to_kitti(points)
+
+                        # Estimate bounding box
+                        bbox_3d = estimator.estimate(
+                            points,
+                            class_id=det.get("class_id", ""),
+                            class_name=det.get("class_name", ""),
+                            confidence=det.get("confidence", 1.0),
+                        )
+
+                        if bbox_3d is not None:
+                            bboxes_3d.append(bbox_3d.to_kitti_format())
+                            total_objects += 1
+                    finally:
+                        # Explicit cleanup of large arrays
+                        del mask
+                        del points
 
                 # Save 3D bounding boxes
                 if bboxes_3d:
@@ -207,7 +248,21 @@ def run_reconstruction(
 
                 total_frames += 1
 
+                # Explicit cleanup after each frame to prevent memory buildup
+                del depth
+                del bboxes_3d
+
+                # Periodic garbage collection for large datasets
+                if idx > 0 and idx % 100 == 0:
+                    gc.collect()
+
             registry.save()
+
+            # Save updated detections with distance values
+            if detections_modified:
+                with open(detections_file, "w") as f:
+                    json.dump(detections_data, f, indent=2)
+                logger.info(f"Updated detections.json with distance values")
 
         logger.info(f"Reconstruction complete: {total_objects} 3D objects in {total_frames} frames")
 
@@ -215,6 +270,7 @@ def run_reconstruction(
             "status": "completed",
             "total_frames": total_frames,
             "total_objects": total_objects,
+            "total_detections": total_detections,
         }
 
     except Exception as e:
@@ -222,4 +278,5 @@ def run_reconstruction(
         return {
             "status": "failed",
             "error": str(e),
+            "total_detections": total_detections if 'total_detections' in dir() else 0,
         }

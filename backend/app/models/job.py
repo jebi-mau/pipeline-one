@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from backend.app.models.dataset import Dataset
     from backend.app.models.export import Export
     from backend.app.models.frame import Frame
     from backend.app.models.track import Track
@@ -35,6 +36,11 @@ class JobConfig(Base, UUIDMixin, TimestampMixin):
     frame_skip: Mapped[int] = mapped_column(Integer, default=1)
     enable_tracking: Mapped[bool] = mapped_column(default=True)
     export_3d_data: Mapped[bool] = mapped_column(default=True)
+
+    # Frame diversity filtering (reduces redundant frames during extraction)
+    enable_diversity_filter: Mapped[bool] = mapped_column(default=False)
+    diversity_similarity_threshold: Mapped[float] = mapped_column(Float, default=0.85)
+    diversity_motion_threshold: Mapped[float] = mapped_column(Float, default=0.02)
 
     # Object classes (JSON array of class IDs)
     object_class_ids: Mapped[list[str]] = mapped_column(
@@ -74,13 +80,33 @@ class ProcessingJob(Base, UUIDMixin, TimestampMixin):
     )
     config: Mapped["JobConfig"] = relationship(back_populates="jobs")
 
+    # Optional link to dataset (for new workflow with rich metadata)
+    dataset_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("datasets.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    dataset: Mapped["Dataset | None"] = relationship(back_populates="jobs")
+
     # Timing
     started_at: Mapped[datetime | None] = mapped_column(nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    stage_started_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+    # Processing rate tracking for ETA calculation
+    frames_per_second: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Error handling
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_stage: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Depth computation settings (depth is computed, not stored in SVO2)
+    depth_mode: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )  # "NEURAL", "ULTRA", "QUALITY", "PERFORMANCE"
+    depth_range_min_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    depth_range_max_m: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Statistics (populated after completion)
     total_frames: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -1,5 +1,5 @@
 /**
- * Shalom - Data Explorer page for browsing extracted frame data
+ * Pipeline One - Data Explorer page for browsing extracted frame data
  */
 
 import { useState, useMemo } from 'react';

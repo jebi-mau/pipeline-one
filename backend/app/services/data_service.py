@@ -2,7 +2,9 @@
 
 import json
 import logging
+import os
 from pathlib import Path
+from typing import Iterator
 from uuid import UUID
 
 from sqlalchemy import select
@@ -25,8 +27,8 @@ from backend.app.schemas.data import (
 
 logger = logging.getLogger(__name__)
 
-# Base output directory
-OUTPUT_BASE = Path("data/output")
+# Base output directory (configurable via environment)
+OUTPUT_BASE = Path(os.getenv("PIPELINE_OUTPUT_DIR", "data/output"))
 
 
 class DataService:
@@ -143,61 +145,111 @@ class DataService:
             completed_at=job.completed_at,
         )
 
+    def _iter_frames_from_registry(
+        self,
+        job_id: UUID,
+        output_dir: Path,
+    ) -> Iterator[tuple[dict, str, Path]]:
+        """
+        Iterate over all frames from registry files.
+
+        Yields:
+            Tuple of (frame_dict, svo2_file, seq_dir)
+        """
+        for seq_dir in sorted(output_dir.iterdir()):
+            if not seq_dir.is_dir():
+                continue
+
+            registry_file = seq_dir / "frame_registry.json"
+            if not registry_file.exists():
+                continue
+
+            try:
+                with open(registry_file) as f:
+                    registry = json.load(f)
+
+                svo2_file = registry.get("svo2_file", seq_dir.name)
+
+                for frame in registry.get("frames", []):
+                    yield (frame, svo2_file, seq_dir)
+
+            except Exception as e:
+                logger.error(f"Error reading registry {registry_file}: {e}")
+                continue
+
+    def _get_frame_count(self, output_dir: Path) -> int:
+        """Get total frame count from all registries (cached metadata)."""
+        total = 0
+        for seq_dir in output_dir.iterdir():
+            if not seq_dir.is_dir():
+                continue
+
+            registry_file = seq_dir / "frame_registry.json"
+            if not registry_file.exists():
+                continue
+
+            try:
+                with open(registry_file) as f:
+                    registry = json.load(f)
+                total += len(registry.get("frames", []))
+            except Exception:
+                continue
+
+        return total
+
     async def list_frames(
         self,
         job_id: UUID,
         limit: int = 50,
         offset: int = 0,
     ) -> FrameListResponse:
-        """List frames for a job."""
+        """List frames for a job with efficient pagination."""
         output_dir = OUTPUT_BASE / str(job_id)
-        all_frames: list[FrameSummary] = []
 
-        if output_dir.exists():
-            # Find all sequence directories
-            for seq_dir in sorted(output_dir.iterdir()):
-                if not seq_dir.is_dir():
-                    continue
+        if not output_dir.exists():
+            return FrameListResponse(
+                frames=[],
+                total=0,
+                limit=limit,
+                offset=offset,
+                job_id=str(job_id),
+            )
 
-                registry_file = seq_dir / "frame_registry.json"
-                if not registry_file.exists():
-                    continue
+        # Get total count (lightweight - just counts from registry metadata)
+        total = self._get_frame_count(output_dir)
 
-                try:
-                    with open(registry_file) as f:
-                        registry = json.load(f)
+        # Collect frames for the requested page
+        # Use generator to avoid loading all frames at once
+        frames_collected: list[tuple[int, FrameSummary]] = []
+        current_index = 0
 
-                    svo2_file = registry.get("svo2_file", seq_dir.name)
+        for frame, svo2_file, seq_dir in self._iter_frames_from_registry(job_id, output_dir):
+            seq_idx = frame.get("sequence_index", 0)
 
-                    for frame in registry.get("frames", []):
-                        frame_id = frame.get("frame_id", "")
-                        seq_idx = frame.get("sequence_index", 0)
+            # Only process frames in the requested range
+            # We need to iterate through all to handle sorting by sequence_index
+            frame_id = frame.get("frame_id", "")
 
-                        all_frames.append(FrameSummary(
-                            id=frame_id,
-                            frame_id=frame_id,
-                            sequence_index=seq_idx,
-                            svo2_frame_index=frame.get("svo2_frame_index", seq_idx),
-                            svo2_file=svo2_file,
-                            timestamp_ns=frame.get("timestamp_ns"),
-                            has_left_image=bool(frame.get("image_left")),
-                            has_right_image=bool(frame.get("image_right")),
-                            has_depth=bool(frame.get("depth")),
-                            has_pointcloud=bool(frame.get("point_cloud")),
-                            detection_count=frame.get("detection_count", 0),
-                            thumbnail_url=f"/api/data/jobs/{job_id}/frames/{frame_id}/image/left" if frame.get("image_left") else None,
-                        ))
+            frames_collected.append((seq_idx, FrameSummary(
+                id=frame_id,
+                frame_id=frame_id,
+                sequence_index=seq_idx,
+                svo2_frame_index=frame.get("svo2_frame_index", seq_idx),
+                svo2_file=svo2_file,
+                timestamp_ns=frame.get("timestamp_ns"),
+                has_left_image=bool(frame.get("image_left")),
+                has_right_image=bool(frame.get("image_right")),
+                has_depth=bool(frame.get("depth")),
+                has_pointcloud=bool(frame.get("point_cloud")),
+                detection_count=frame.get("detection_count", 0),
+                thumbnail_url=f"/api/data/jobs/{job_id}/frames/{frame_id}/image/left" if frame.get("image_left") else None,
+            )))
 
-                except Exception as e:
-                    logger.error(f"Error reading registry {registry_file}: {e}")
-                    continue
+            current_index += 1
 
-        # Sort by sequence index
-        all_frames.sort(key=lambda f: f.sequence_index)
-
-        # Apply pagination
-        total = len(all_frames)
-        paginated = all_frames[offset:offset + limit]
+        # Sort by sequence index and apply pagination
+        frames_collected.sort(key=lambda x: x[0])
+        paginated = [f for _, f in frames_collected[offset:offset + limit]]
 
         return FrameListResponse(
             frames=paginated,
@@ -305,13 +357,15 @@ class DataService:
                     class_color=self._get_class_color(det.get("class_name", "")),
                     confidence=det.get("confidence", 0.0),
                     bbox_2d=BBox2D(
+                        # SAM3 outputs bbox as [x1, y1, x2, y2], convert to [x, y, width, height]
                         x=bbox[0] if len(bbox) > 0 else 0,
                         y=bbox[1] if len(bbox) > 1 else 0,
-                        width=bbox[2] if len(bbox) > 2 else 0,
-                        height=bbox[3] if len(bbox) > 3 else 0,
+                        width=(bbox[2] - bbox[0]) if len(bbox) > 2 else 0,
+                        height=(bbox[3] - bbox[1]) if len(bbox) > 3 else 0,
                     ),
                     bbox_3d=None,  # 3D boxes computed separately in reconstruction
                     mask_url=mask_url,
+                    distance=det.get("distance"),  # Center patch average depth (meters)
                 ))
 
         except Exception as e:

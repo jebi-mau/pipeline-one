@@ -1,5 +1,5 @@
 /**
- * Shalom - IMU Data Display with horizontal bar graphs
+ * Pipeline One - IMU Data Display with horizontal bar graphs
  */
 
 import type { FrameMetadataSummary } from '../../types/data';

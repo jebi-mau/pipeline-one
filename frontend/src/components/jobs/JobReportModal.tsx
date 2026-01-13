@@ -1,5 +1,5 @@
 /**
- * Shalom - Job Report Modal component
+ * Pipeline One - Job Report Modal component
  * Displays comprehensive job report with all details and PDF download
  */
 
@@ -75,22 +75,27 @@ export function JobReportModal({ isOpen, onClose, job }: JobReportModalProps) {
 
   const handleDownloadPDF = async () => {
     setIsDownloading(true);
+    let url: string | null = null;
+
     try {
       const blob = await pdf(
         <JobReportPDF job={job} results={results || undefined} />
       ).toBlob();
 
-      const url = URL.createObjectURL(blob);
+      url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `job-report-${job.name.replace(/\s+/g, '-').toLowerCase()}-${job.id.slice(0, 8)}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to generate PDF:', error);
     } finally {
+      // Always cleanup URL object to prevent memory leak
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
       setIsDownloading(false);
     }
   };

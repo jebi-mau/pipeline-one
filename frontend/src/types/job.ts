@@ -1,5 +1,5 @@
 /**
- * Shalom - Job type definitions for SVO2-SAM3 Analyzer
+ * Pipeline One - Job type definitions
  */
 
 export type JobStatus = 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
@@ -15,18 +15,39 @@ export const STAGE_INFO: Record<PipelineStage, { name: string; description: stri
   tracking: { name: 'Tracking', description: 'Track objects across frames', number: 4 },
 };
 
+export type StageStatus = 'pending' | 'running' | 'completed' | 'skipped';
+
+export interface StageETA {
+  stage: string;
+  stage_number: number;
+  status: StageStatus;
+  eta_seconds: number | null;
+  elapsed_seconds: number | null;
+}
+
 export interface JobConfig {
   object_class_ids?: string[];
   sam3_model_variant?: string;
+  /** Confidence threshold for SAM3 detections (0-1) */
   sam3_confidence_threshold?: number;
-  sam3_confidence?: number;
+  /** IOU threshold for non-max suppression */
   sam3_iou_threshold?: number;
+  /** Batch size for SAM3 inference */
   sam3_batch_size?: number;
-  batch_size?: number;
+  /** Frame skip interval (1 = process all frames) */
   frame_skip?: number;
+  /** Enable object tracking across frames */
   enable_tracking?: boolean;
+  /** Export 3D bounding box data */
   export_3d_data?: boolean;
+  /** Pipeline stages to run */
   stages_to_run?: PipelineStage[];
+  /** Enable frame diversity filtering during extraction */
+  enable_diversity_filter?: boolean;
+  /** Similarity threshold for diversity filter (0-1, higher = more strict) */
+  diversity_similarity_threshold?: number;
+  /** Motion threshold for diversity filter (0-1, min motion to keep frame) */
+  diversity_motion_threshold?: number;
 }
 
 export interface Job {
@@ -39,17 +60,22 @@ export interface Job {
   stage_progress?: number;
   total_frames?: number | null;
   processed_frames?: number | null;
+  total_detections?: number | null;
   input_paths?: string[];
   input_files?: string[];
   object_classes?: string[];
   output_directory?: string | null;
   config?: JobConfig;
   stages_to_run?: PipelineStage[];
+  dataset_id?: string | null;
   error_message?: string | null;
   created_at: string;
   started_at?: string | null;
   completed_at?: string | null;
+  // ETA fields
   eta_seconds?: number | null;
+  stage_etas?: StageETA[];
+  frames_per_second?: number | null;
 }
 
 export interface JobListResponse {
@@ -89,3 +115,6 @@ export interface JobResults {
   output_directory: string;
   available_exports: string[];
 }
+
+// Alias for backward compatibility
+export type JobResponse = Job;

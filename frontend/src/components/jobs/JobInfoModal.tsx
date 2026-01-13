@@ -1,5 +1,5 @@
 /**
- * Shalom - Job Info Modal component
+ * Pipeline One - Job Info Modal component
  * Shows details about files being processed and job settings
  */
 
@@ -119,13 +119,13 @@ export function JobInfoModal({ isOpen, onClose, job }: JobInfoModalProps) {
               <div>
                 <span className="text-secondary-500">Confidence:</span>
                 <span className="ml-2 text-secondary-300">
-                  {config.sam3_confidence_threshold ?? config.sam3_confidence ?? 0.5}
+                  {config.sam3_confidence_threshold ?? 0.5}
                 </span>
               </div>
               <div>
                 <span className="text-secondary-500">Batch Size:</span>
                 <span className="ml-2 text-secondary-300">
-                  {config.sam3_batch_size ?? config.batch_size ?? 4}
+                  {config.sam3_batch_size ?? 4}
                 </span>
               </div>
               <div>

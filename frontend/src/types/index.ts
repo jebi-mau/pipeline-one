@@ -1,5 +1,5 @@
 /**
- * Shalom - Type definitions index
+ * Pipeline One - Type definitions index
  */
 
 export * from './job';

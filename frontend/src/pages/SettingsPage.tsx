@@ -1,5 +1,5 @@
 /**
- * Shalom - Settings page with state management
+ * Pipeline One - Settings page with state management
  */
 
 import { useState, useEffect } from 'react';

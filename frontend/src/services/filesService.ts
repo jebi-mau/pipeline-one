@@ -1,5 +1,5 @@
 /**
- * Shalom - Files API service
+ * Pipeline One - Files API service
  */
 
 import api from './api';

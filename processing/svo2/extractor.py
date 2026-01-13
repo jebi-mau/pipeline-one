@@ -26,6 +26,7 @@ class ExtractionConfig:
     extract_depth: bool = True
     extract_point_cloud: bool = True
     extract_imu: bool = True
+    extract_numpy: bool = False  # Extract RGB frames as NumPy arrays for training
 
     # Frame selection
     frame_skip: int = 1  # Process every Nth frame (1 = all frames)
@@ -35,7 +36,12 @@ class ExtractionConfig:
     # Output formats
     image_format: str = "png"  # png, jpg
     depth_format: str = "png16"  # png16 (16-bit), npy, exr
-    point_cloud_format: str = "ply"  # ply, pcd, npy
+    # Point cloud format:
+    #   - "ply": ASCII PLY (~76MB per frame, human-readable)
+    #   - "ply_binary": Binary PLY (~10MB per frame, recommended)
+    #   - "npy": NumPy binary (~10MB per frame)
+    #   - "bin": KITTI binary format
+    point_cloud_format: str = "ply_binary"  # Default to binary for space efficiency
 
     # Image compression
     jpeg_quality: int = 95
@@ -44,6 +50,12 @@ class ExtractionConfig:
     # Depth settings
     depth_scale: float = 1000.0  # Scale factor for 16-bit (1000 = mm)
     max_depth: float = 100.0  # Maximum depth in meters
+
+    # Lineage context for enhanced naming
+    # When set, files are named: {dataset_id[:8]}_{svo2_timestamp}_{camera_serial}_{frame_index:06d}.ext
+    dataset_id: str | None = None
+    original_unix_timestamp: int | None = None
+    use_enhanced_naming: bool = False  # Enable enhanced naming pattern
 
 
 @dataclass
@@ -115,6 +127,13 @@ class SVO2Extractor:
 
         if self.config.extract_imu:
             (self.output_dir / "oxts").mkdir(exist_ok=True)
+            (self.output_dir / "sensors" / "imu").mkdir(parents=True, exist_ok=True)
+
+        if self.config.extract_numpy:
+            (self.output_dir / "numpy" / "left").mkdir(parents=True, exist_ok=True)
+            (self.output_dir / "numpy" / "right").mkdir(parents=True, exist_ok=True)
+            if self.config.extract_depth:
+                (self.output_dir / "depth_numpy").mkdir(exist_ok=True)
 
         (self.output_dir / "calib").mkdir(exist_ok=True)
 
@@ -213,7 +232,17 @@ class SVO2Extractor:
         """
         # Generate unique frame ID
         frame_id = f"{self.reader.file_hash}_{frame.frame_index:06d}"
-        filename_base = f"{sequence_index:06d}"
+
+        # Generate filename based on naming strategy
+        if self.config.use_enhanced_naming:
+            # Enhanced naming: {dataset_id[:8]}_{svo2_timestamp}_{camera_serial}_{frame_index:06d}
+            dataset_prefix = (self.config.dataset_id or "unk")[:8]
+            svo2_timestamp = self.config.original_unix_timestamp or 0
+            camera_serial = self.reader.camera_serial or "unknown"
+            filename_base = f"{dataset_prefix}_{svo2_timestamp}_{camera_serial}_{sequence_index:06d}"
+        else:
+            # Simple naming: {sequence_index:06d}
+            filename_base = f"{sequence_index:06d}"
 
         registry = {
             "frame_id": frame_id,
@@ -221,6 +250,7 @@ class SVO2Extractor:
             "svo2_frame_index": frame.frame_index,
             "svo2_file": self.reader.file_path.name,
             "timestamp_ns": frame.timestamp_ns,
+            "filename_base": filename_base,  # Store for lineage tracking
         }
 
         # Save left image
@@ -239,6 +269,26 @@ class SVO2Extractor:
             )
             registry["image_right"] = str(path.relative_to(self.output_dir))
 
+        # Save NumPy arrays (for training)
+        if self.config.extract_numpy:
+            if frame.image_left is not None:
+                npy_path, meta_path = self._save_numpy_array(
+                    frame.image_left,
+                    self.output_dir / "numpy" / "left" / f"{filename_base}.npy",
+                    frame,
+                    "left",
+                )
+                registry["numpy_left"] = str(npy_path.relative_to(self.output_dir))
+
+            if frame.image_right is not None:
+                npy_path, meta_path = self._save_numpy_array(
+                    frame.image_right,
+                    self.output_dir / "numpy" / "right" / f"{filename_base}.npy",
+                    frame,
+                    "right",
+                )
+                registry["numpy_right"] = str(npy_path.relative_to(self.output_dir))
+
         # Save depth
         if self.config.extract_depth and frame.depth is not None:
             path = self._save_depth(
@@ -246,6 +296,12 @@ class SVO2Extractor:
                 self.output_dir / "depth" / filename_base,
             )
             registry["depth"] = str(path.relative_to(self.output_dir))
+
+            # Also save depth as NumPy if extract_numpy is enabled
+            if self.config.extract_numpy:
+                depth_npy_path = self.output_dir / "depth_numpy" / f"{filename_base}.npy"
+                np.save(depth_npy_path, frame.depth)
+                registry["depth_numpy"] = str(depth_npy_path.relative_to(self.output_dir))
 
         # Save point cloud
         if self.config.extract_point_cloud and frame.point_cloud is not None:
@@ -261,28 +317,34 @@ class SVO2Extractor:
                 frame.imu,
                 self.output_dir / "oxts" / f"{filename_base}.txt",
             )
+            # Also save full sensor data as JSON
+            sensor_path = self._save_sensor_json(
+                frame.imu,
+                self.output_dir / "sensors" / "imu" / f"{filename_base}.json",
+            )
+            registry["sensor_json"] = str(sensor_path.relative_to(self.output_dir))
             registry["imu"] = str(path.relative_to(self.output_dir))
 
         return registry
 
     def _save_image(self, image: np.ndarray, path: Path) -> Path:
-        """Save RGB image to disk."""
-        # Convert BGR to RGB if needed (OpenCV uses BGR)
-        if len(image.shape) == 3 and image.shape[2] == 3:
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        else:
-            image_rgb = image
+        """Save image to disk.
 
+        Note: OpenCV uses BGR format internally, and cv2.imwrite expects BGR.
+        If the input image is already in BGR (from ZED SDK), save directly.
+        """
+        # OpenCV imwrite expects BGR format - save directly without conversion
+        # The ZED SDK typically provides images in BGR format already
         if path.suffix.lower() in [".jpg", ".jpeg"]:
             cv2.imwrite(
                 str(path),
-                cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR),
+                image,
                 [cv2.IMWRITE_JPEG_QUALITY, self.config.jpeg_quality],
             )
         else:
             cv2.imwrite(
                 str(path),
-                cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR),
+                image,
                 [cv2.IMWRITE_PNG_COMPRESSION, self.config.png_compression],
             )
 
@@ -319,6 +381,11 @@ class SVO2Extractor:
             path = path_base.with_suffix(".ply")
             self._write_ply(point_cloud, path)
 
+        elif self.config.point_cloud_format == "ply_binary":
+            # Binary PLY format - much smaller than ASCII (~7-8x compression)
+            path = path_base.with_suffix(".ply")
+            self._write_ply_binary(point_cloud, path)
+
         elif self.config.point_cloud_format == "npy":
             path = path_base.with_suffix(".npy")
             np.save(path, point_cloud)
@@ -334,7 +401,7 @@ class SVO2Extractor:
         return path
 
     def _write_ply(self, point_cloud: np.ndarray, path: Path) -> None:
-        """Write point cloud to PLY file."""
+        """Write point cloud to PLY file with buffered I/O for performance."""
         # Reshape if needed (H x W x 4 -> N x 4)
         if len(point_cloud.shape) == 3:
             points = point_cloud.reshape(-1, point_cloud.shape[-1])
@@ -345,30 +412,141 @@ class SVO2Extractor:
         valid_mask = np.isfinite(points[:, :3]).all(axis=1)
         points = points[valid_mask]
 
-        # Write PLY header and data
-        with open(path, "w") as f:
-            f.write("ply\n")
-            f.write("format ascii 1.0\n")
-            f.write(f"element vertex {len(points)}\n")
-            f.write("property float x\n")
-            f.write("property float y\n")
-            f.write("property float z\n")
-            if points.shape[1] >= 4:
-                f.write("property uchar red\n")
-                f.write("property uchar green\n")
-                f.write("property uchar blue\n")
-            f.write("end_header\n")
+        has_color = points.shape[1] >= 4
 
-            for point in points:
-                if points.shape[1] >= 4:
-                    # XYZRGBA format - extract RGB from packed value
-                    rgba = point[3].view(np.uint32)
-                    r = (rgba >> 0) & 0xFF
-                    g = (rgba >> 8) & 0xFF
-                    b = (rgba >> 16) & 0xFF
-                    f.write(f"{point[0]:.6f} {point[1]:.6f} {point[2]:.6f} {r} {g} {b}\n")
-                else:
-                    f.write(f"{point[0]:.6f} {point[1]:.6f} {point[2]:.6f}\n")
+        # Build header
+        header_lines = [
+            "ply",
+            "format ascii 1.0",
+            f"element vertex {len(points)}",
+            "property float x",
+            "property float y",
+            "property float z",
+        ]
+        if has_color:
+            header_lines.extend([
+                "property uchar red",
+                "property uchar green",
+                "property uchar blue",
+            ])
+        header_lines.append("end_header")
+        header = "\n".join(header_lines) + "\n"
+
+        # Use buffered writing for performance (batch of 10000 points)
+        BATCH_SIZE = 10000
+
+        with open(path, "w", buffering=1024 * 1024) as f:  # 1MB buffer
+            f.write(header)
+
+            if has_color:
+                # Extract RGB from packed RGBA values (vectorized)
+                rgba_values = points[:, 3].view(np.uint32)
+                r_values = (rgba_values >> 0) & 0xFF
+                g_values = (rgba_values >> 8) & 0xFF
+                b_values = (rgba_values >> 16) & 0xFF
+
+                # Write in batches
+                for i in range(0, len(points), BATCH_SIZE):
+                    batch_end = min(i + BATCH_SIZE, len(points))
+                    batch_points = points[i:batch_end]
+                    batch_r = r_values[i:batch_end]
+                    batch_g = g_values[i:batch_end]
+                    batch_b = b_values[i:batch_end]
+
+                    lines = [
+                        f"{p[0]:.6f} {p[1]:.6f} {p[2]:.6f} {r} {g} {b}\n"
+                        for p, r, g, b in zip(batch_points, batch_r, batch_g, batch_b)
+                    ]
+                    f.writelines(lines)
+            else:
+                # Write in batches (no color)
+                for i in range(0, len(points), BATCH_SIZE):
+                    batch_end = min(i + BATCH_SIZE, len(points))
+                    batch_points = points[i:batch_end]
+
+                    lines = [
+                        f"{p[0]:.6f} {p[1]:.6f} {p[2]:.6f}\n"
+                        for p in batch_points
+                    ]
+                    f.writelines(lines)
+
+    def _write_ply_binary(self, point_cloud: np.ndarray, path: Path) -> None:
+        """
+        Write point cloud to binary PLY file.
+
+        Binary PLY is ~7-8x smaller than ASCII PLY:
+        - ASCII: ~76 MB per frame
+        - Binary: ~10 MB per frame
+
+        Binary format uses little-endian floats for coordinates
+        and bytes for RGB values.
+        """
+        import struct
+
+        # Reshape if needed (H x W x 4 -> N x 4)
+        if len(point_cloud.shape) == 3:
+            points = point_cloud.reshape(-1, point_cloud.shape[-1])
+        else:
+            points = point_cloud
+
+        # Filter invalid points
+        valid_mask = np.isfinite(points[:, :3]).all(axis=1)
+        points = points[valid_mask]
+
+        has_color = points.shape[1] >= 4
+
+        # Build header
+        header_lines = [
+            "ply",
+            "format binary_little_endian 1.0",
+            f"element vertex {len(points)}",
+            "property float x",
+            "property float y",
+            "property float z",
+        ]
+        if has_color:
+            header_lines.extend([
+                "property uchar red",
+                "property uchar green",
+                "property uchar blue",
+            ])
+        header_lines.append("end_header")
+        header = "\n".join(header_lines) + "\n"
+
+        with open(path, "wb") as f:
+            # Write ASCII header
+            f.write(header.encode("ascii"))
+
+            if has_color:
+                # Extract RGB from packed RGBA values (vectorized)
+                rgba_values = points[:, 3].view(np.uint32)
+                r_values = ((rgba_values >> 0) & 0xFF).astype(np.uint8)
+                g_values = ((rgba_values >> 8) & 0xFF).astype(np.uint8)
+                b_values = ((rgba_values >> 16) & 0xFF).astype(np.uint8)
+
+                # Create structured array for efficient binary write
+                # Each vertex: 3 floats (12 bytes) + 3 bytes (RGB) = 15 bytes
+                xyz = points[:, :3].astype(np.float32)
+
+                # Write in batches for memory efficiency
+                BATCH_SIZE = 50000
+                for i in range(0, len(points), BATCH_SIZE):
+                    batch_end = min(i + BATCH_SIZE, len(points))
+
+                    # Pack xyz floats
+                    xyz_batch = xyz[i:batch_end]
+                    r_batch = r_values[i:batch_end]
+                    g_batch = g_values[i:batch_end]
+                    b_batch = b_values[i:batch_end]
+
+                    # Write interleaved data
+                    for j in range(len(xyz_batch)):
+                        f.write(struct.pack("<fff", xyz_batch[j, 0], xyz_batch[j, 1], xyz_batch[j, 2]))
+                        f.write(struct.pack("BBB", r_batch[j], g_batch[j], b_batch[j]))
+            else:
+                # No color - just write xyz floats
+                xyz = points[:, :3].astype(np.float32)
+                xyz.tofile(f)
 
     def _write_kitti_bin(self, point_cloud: np.ndarray, path: Path) -> None:
         """Write point cloud to KITTI binary format."""
@@ -473,6 +651,66 @@ class SVO2Extractor:
 
         return roll, pitch, yaw
 
+    def _save_numpy_array(
+        self,
+        image: np.ndarray,
+        path: Path,
+        frame: FrameData,
+        camera_side: str,
+    ) -> tuple[Path, Path]:
+        """
+        Save RGB image as NumPy array with companion metadata.
+
+        Args:
+            image: RGB image as numpy array (BGR from OpenCV)
+            path: Output path for .npy file
+            frame: FrameData containing metadata
+            camera_side: "left" or "right"
+
+        Returns:
+            Tuple of (numpy_path, metadata_path)
+        """
+        # Convert BGR to RGB for training (most ML frameworks expect RGB)
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        # Save the numpy array
+        np.save(path, rgb_image)
+
+        # Create companion metadata
+        metadata = {
+            "source_svo2": self.reader.file_path.name,
+            "dataset_id": self.config.dataset_id,
+            "frame_index": frame.frame_index,
+            "timestamp_ns": frame.timestamp_ns,
+            "camera_serial": self.reader.camera_serial,
+            "camera_side": camera_side,
+            "resolution": list(rgb_image.shape[:2][::-1]),  # [width, height]
+            "dtype": str(rgb_image.dtype),
+            "channels": rgb_image.shape[2] if len(rgb_image.shape) > 2 else 1,
+            "color_space": "RGB",
+        }
+
+        # Save metadata alongside the numpy file
+        meta_path = path.with_suffix(".json")
+        with open(meta_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+
+        return path, meta_path
+
+    def _save_sensor_json(self, imu, path: Path) -> Path:
+        """Save full sensor data to JSON format."""
+        sensor_data = imu.to_full_sensor_dict()
+
+        # Add lineage context
+        sensor_data["source_svo2"] = self.reader.file_path.name
+        sensor_data["dataset_id"] = self.config.dataset_id
+        sensor_data["camera_serial"] = self.reader.camera_serial
+
+        with open(path, "w") as f:
+            json.dump(sensor_data, f, indent=2)
+
+        return path
+
     def _save_calibration(self) -> Path:
         """Save camera calibration to KITTI format."""
         calib = self.reader.calibration
@@ -525,6 +763,13 @@ class SVO2Extractor:
                 "end_frame": self.config.end_frame,
                 "depth_format": self.config.depth_format,
                 "point_cloud_format": self.config.point_cloud_format,
+            },
+            # Lineage context
+            "lineage": {
+                "dataset_id": self.config.dataset_id,
+                "original_unix_timestamp": self.config.original_unix_timestamp,
+                "camera_serial": self.reader.camera_serial,
+                "use_enhanced_naming": self.config.use_enhanced_naming,
             },
             "frames": self._frame_registry,
         }

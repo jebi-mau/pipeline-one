@@ -1,5 +1,5 @@
 /**
- * Shalom - File browser type definitions
+ * Pipeline One - File browser type definitions
  */
 
 export interface DirectoryInfo {

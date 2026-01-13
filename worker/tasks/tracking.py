@@ -2,16 +2,29 @@
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
 from worker.celery_app import app
-from worker.tasks.extraction import update_job_progress
+from worker.db import update_job_progress
 
 logger = logging.getLogger(__name__)
 
+# Default output base directory (configurable via environment)
+OUTPUT_BASE = Path(os.getenv("PIPELINE_OUTPUT_DIR", "data/output"))
 
-@app.task(bind=True, name="worker.tasks.tracking.run_tracking")
+
+@app.task(
+    bind=True,
+    name="worker.tasks.tracking.run_tracking",
+    max_retries=3,
+    default_retry_delay=60,
+    autoretry_for=(IOError, OSError, ConnectionError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
 def run_tracking(
     self,
     reconstruction_result: dict | None,
@@ -36,12 +49,15 @@ def run_tracking(
     logger.info(f"Running tracking for job {job_id}")
 
     if reconstruction_result is None:
-        return {"status": "skipped", "reason": "No reconstruction results"}
+        return {"status": "skipped", "reason": "No reconstruction results", "total_detections": 0}
 
-    # Get output directory from job
-    output_dir = Path(f"data/output/{job_id}")
+    # Preserve total_detections from previous stages
+    total_detections = reconstruction_result.get("total_detections", 0)
+
+    # Get output directory from config or use default
+    output_dir = Path(config.get("output_directory", OUTPUT_BASE / job_id))
     if not output_dir.exists():
-        return {"status": "skipped", "reason": "Output directory not found"}
+        return {"status": "skipped", "reason": f"Output directory not found: {output_dir}", "total_detections": total_detections}
 
     # Configuration
     track_config = ByteTrackConfig(
@@ -168,6 +184,7 @@ def run_tracking(
         return {
             "status": "completed",
             "total_tracks": total_tracks,
+            "total_detections": total_detections,
         }
 
     except Exception as e:
@@ -175,6 +192,7 @@ def run_tracking(
         return {
             "status": "failed",
             "error": str(e),
+            "total_detections": total_detections if 'total_detections' in dir() else 0,
         }
 
 

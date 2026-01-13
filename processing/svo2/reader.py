@@ -100,6 +100,19 @@ class IMUData:
     orientation_y: float
     orientation_z: float
 
+    # Magnetometer (µT) - from get_magnetometer_data()
+    mag_x: float | None = None
+    mag_y: float | None = None
+    mag_z: float | None = None
+
+    # Barometer data - from get_barometer_data()
+    pressure_hpa: float | None = None  # Atmospheric pressure (hPa)
+    altitude_m: float | None = None    # Estimated altitude (m)
+
+    # Temperature data
+    imu_temperature_c: float | None = None       # IMU sensor temperature
+    barometer_temperature_c: float | None = None # Barometer temperature
+
     def to_oxts_format(self) -> dict[str, float]:
         """Convert IMU data to KITTI oxts format."""
         return {
@@ -113,6 +126,33 @@ class IMUData:
             "qx": self.orientation_x,
             "qy": self.orientation_y,
             "qz": self.orientation_z,
+        }
+
+    def to_full_sensor_dict(self) -> dict:
+        """Convert all sensor data to dictionary for JSON serialization."""
+        return {
+            "timestamp_ns": self.timestamp_ns,
+            "imu": {
+                "accel": {"x": self.accel_x, "y": self.accel_y, "z": self.accel_z},
+                "gyro": {"x": self.gyro_x, "y": self.gyro_y, "z": self.gyro_z},
+                "orientation": {
+                    "w": self.orientation_w,
+                    "x": self.orientation_x,
+                    "y": self.orientation_y,
+                    "z": self.orientation_z,
+                },
+                "temperature_c": self.imu_temperature_c,
+            },
+            "magnetometer": {
+                "x": self.mag_x,
+                "y": self.mag_y,
+                "z": self.mag_z,
+            } if self.mag_x is not None else None,
+            "barometer": {
+                "pressure_hpa": self.pressure_hpa,
+                "altitude_m": self.altitude_m,
+                "temperature_c": self.barometer_temperature_c,
+            } if self.pressure_hpa is not None else None,
         }
 
 
@@ -234,6 +274,16 @@ class SVO2Reader:
                 raise RuntimeError("SVO2 file is not open")
             self._calibration = self._extract_calibration()
         return self._calibration
+
+    @property
+    def camera_serial(self) -> str | None:
+        """Get camera serial number."""
+        if not self._is_open:
+            return None
+        if not PYZED_AVAILABLE or self._camera is None:
+            return None
+        cam_info = self._camera.get_camera_information()
+        return str(cam_info.serial_number)
 
     def open(self) -> None:
         """Open the SVO2 file for reading."""
@@ -426,6 +476,7 @@ class SVO2Reader:
                 gyro = imu_data.get_angular_velocity()
                 orient = imu_data.get_pose().get_orientation()
 
+                # Initialize IMU data with basic accelerometer, gyroscope, orientation
                 frame_data.imu = IMUData(
                     timestamp_ns=timestamp.get_nanoseconds(),
                     accel_x=accel[0],
@@ -439,6 +490,50 @@ class SVO2Reader:
                     orientation_y=orient.get()[2],
                     orientation_z=orient.get()[3],
                 )
+
+                # Extract magnetometer data if available
+                try:
+                    mag_data = sensors_data.get_magnetometer_data()
+                    if mag_data.is_available:
+                        mag_field = mag_data.get_magnetic_field_calibrated()
+                        frame_data.imu.mag_x = mag_field[0]
+                        frame_data.imu.mag_y = mag_field[1]
+                        frame_data.imu.mag_z = mag_field[2]
+                except (AttributeError, RuntimeError):
+                    pass  # Magnetometer not available on this device
+
+                # Extract barometer data if available
+                try:
+                    baro_data = sensors_data.get_barometer_data()
+                    if baro_data.is_available:
+                        frame_data.imu.pressure_hpa = baro_data.pressure
+                        frame_data.imu.altitude_m = baro_data.relative_altitude
+                        # Barometer temperature if available
+                        if hasattr(baro_data, 'effective_rate'):
+                            pass  # Some SDK versions expose different attrs
+                except (AttributeError, RuntimeError):
+                    pass  # Barometer not available on this device
+
+                # Extract temperature data if available
+                try:
+                    temp_data = sensors_data.get_temperature_data()
+                    # IMU temperature
+                    if hasattr(temp_data, 'get'):
+                        imu_temp = temp_data.get(sl.SENSOR_LOCATION.IMU)
+                        if imu_temp != -1:  # -1 indicates not available
+                            frame_data.imu.imu_temperature_c = imu_temp
+                        baro_temp = temp_data.get(sl.SENSOR_LOCATION.BAROMETER)
+                        if baro_temp != -1:
+                            frame_data.imu.barometer_temperature_c = baro_temp
+                    elif hasattr(temp_data, 'temperature_map'):
+                        # Alternative SDK version
+                        temp_map = temp_data.temperature_map
+                        if sl.SENSOR_LOCATION.IMU in temp_map:
+                            frame_data.imu.imu_temperature_c = temp_map[sl.SENSOR_LOCATION.IMU]
+                        if sl.SENSOR_LOCATION.BAROMETER in temp_map:
+                            frame_data.imu.barometer_temperature_c = temp_map[sl.SENSOR_LOCATION.BAROMETER]
+                except (AttributeError, RuntimeError, KeyError):
+                    pass  # Temperature data not available
 
         return frame_data
 
@@ -492,15 +587,83 @@ class SVO2Reader:
 
             if PYZED_AVAILABLE and self._camera is not None:
                 cam_info = self._camera.get_camera_information()
+                cam_config = cam_info.camera_configuration
                 metadata.update({
                     "serial_number": cam_info.serial_number,
                     "camera_model": str(cam_info.camera_model),
-                    "firmware_version": cam_info.camera_configuration.firmware_version,
+                    "firmware_version": cam_config.firmware_version,
                     "resolution": {
                         "width": self.calibration.width,
                         "height": self.calibration.height,
                     },
-                    "fps": cam_info.camera_configuration.fps,
+                    "fps": cam_config.fps,
                 })
 
+                # Video container metadata (SVO2 format info)
+                video_metadata = self._get_video_metadata()
+                if video_metadata:
+                    metadata["video"] = video_metadata
+
+                # Sensor availability
+                sensors = self._get_sensor_availability()
+                if sensors:
+                    metadata["sensors"] = sensors
+
         return metadata
+
+    def _get_video_metadata(self) -> dict | None:
+        """Get video encoding metadata from SVO2 file."""
+        if not PYZED_AVAILABLE or self._camera is None:
+            return None
+
+        try:
+            rec_params = self._camera.get_recording_parameters()
+            video_meta = {}
+
+            # Compression mode
+            if hasattr(rec_params, 'compression_mode'):
+                comp_mode = rec_params.compression_mode
+                if hasattr(sl, 'SVO_COMPRESSION_MODE'):
+                    if comp_mode == sl.SVO_COMPRESSION_MODE.LOSSLESS:
+                        video_meta["compression_mode"] = "LOSSLESS"
+                    elif comp_mode == sl.SVO_COMPRESSION_MODE.H264:
+                        video_meta["compression_mode"] = "H264"
+                        video_meta["video_codec"] = "H264"
+                    elif comp_mode == sl.SVO_COMPRESSION_MODE.H265:
+                        video_meta["compression_mode"] = "H265"
+                        video_meta["video_codec"] = "H265/HEVC"
+                    elif hasattr(sl.SVO_COMPRESSION_MODE, 'H264_LOSSLESS') and comp_mode == sl.SVO_COMPRESSION_MODE.H264_LOSSLESS:
+                        video_meta["compression_mode"] = "H264_LOSSLESS"
+                        video_meta["video_codec"] = "H264"
+                    elif hasattr(sl.SVO_COMPRESSION_MODE, 'H265_LOSSLESS') and comp_mode == sl.SVO_COMPRESSION_MODE.H265_LOSSLESS:
+                        video_meta["compression_mode"] = "H265_LOSSLESS"
+                        video_meta["video_codec"] = "H265/HEVC"
+
+            # Bitrate if available
+            if hasattr(rec_params, 'bitrate'):
+                video_meta["bitrate_kbps"] = rec_params.bitrate
+
+            # Target framerate
+            if hasattr(rec_params, 'target_framerate'):
+                video_meta["target_framerate"] = rec_params.target_framerate
+
+            return video_meta if video_meta else None
+        except (AttributeError, RuntimeError) as e:
+            logger.debug(f"Could not get video metadata: {e}")
+            return None
+
+    def _get_sensor_availability(self) -> dict | None:
+        """Check which sensors are available on this camera."""
+        if not PYZED_AVAILABLE or self._camera is not None:
+            return None
+
+        try:
+            sensors_config = self._camera.get_camera_information().sensors_configuration
+            availability = {
+                "imu": sensors_config.imu.is_available if hasattr(sensors_config, 'imu') else False,
+                "magnetometer": sensors_config.magnetometer.is_available if hasattr(sensors_config, 'magnetometer') else False,
+                "barometer": sensors_config.barometer.is_available if hasattr(sensors_config, 'barometer') else False,
+            }
+            return availability
+        except (AttributeError, RuntimeError):
+            return None

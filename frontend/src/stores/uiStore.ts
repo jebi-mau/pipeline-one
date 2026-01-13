@@ -1,5 +1,5 @@
 /**
- * Shalom - UI state store using Zustand
+ * Pipeline One - UI state store using Zustand
  */
 
 import { create } from 'zustand';

@@ -1,5 +1,5 @@
 /**
- * Shalom - Create Job Modal component with enhanced file browser and full configuration
+ * Pipeline One - Create Job Modal component with enhanced file browser and full configuration
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -8,6 +8,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useBrowseFiles } from '../../hooks/useFiles';
 import { useObjectClasses, useModelInfo } from '../../hooks/useConfig';
 import { useCreateJob, useStartJob } from '../../hooks/useJobs';
+import { useDataset } from '../../hooks/useDatasets';
 import {
   FolderIcon,
   DocumentIcon,
@@ -26,6 +27,7 @@ import { ALL_PIPELINE_STAGES, STAGE_INFO } from '../../types/job';
 interface CreateJobModalProps {
   isOpen: boolean;
   onClose: () => void;
+  preselectedDatasetId?: string | null;
 }
 
 // Quick access locations
@@ -35,17 +37,19 @@ const QUICK_LOCATIONS = [
   { name: 'Project', path: '/home/atlas/dev/pipe1', icon: FolderIcon },
 ];
 
-export function CreateJobModal({ isOpen, onClose }: CreateJobModalProps) {
+export function CreateJobModal({ isOpen, onClose, preselectedDatasetId }: CreateJobModalProps) {
   // Basic job settings
   const [jobName, setJobName] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [autoStart, setAutoStart] = useState(true);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
 
   // File browser state
   const [currentPath, setCurrentPath] = useState('/home/atlas/dev/pipe1/data/svo2');
   const [pathInput, setPathInput] = useState('/home/atlas/dev/pipe1/data/svo2');
   const [showAllFiles, setShowAllFiles] = useState(false);
+  const [useDatasetFiles, setUseDatasetFiles] = useState(false);
 
   // Pipeline stage selection
   const [selectedStages, setSelectedStages] = useState<PipelineStage[]>([...ALL_PIPELINE_STAGES]);
@@ -59,12 +63,18 @@ export function CreateJobModal({ isOpen, onClose }: CreateJobModalProps) {
   const [enableTracking, setEnableTracking] = useState(true);
   const [export3DData, setExport3DData] = useState(true);
 
+  // Diversity filter settings
+  const [enableDiversityFilter, setEnableDiversityFilter] = useState(false);
+  const [diversitySimilarityThreshold, setDiversitySimilarityThreshold] = useState(0.85);
+  const [diversityMotionThreshold, setDiversityMotionThreshold] = useState(0.02);
+
   // UI state
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const { data: filesData, isLoading: filesLoading, isError, refetch } = useBrowseFiles(currentPath, showAllFiles);
   const { data: classesData, isLoading: classesLoading } = useObjectClasses();
   const { data: modelInfo, isLoading: modelLoading } = useModelInfo();
+  const { data: datasetData, isLoading: datasetLoading } = useDataset(selectedDatasetId || undefined);
   const createJob = useCreateJob();
   const startJob = useStartJob();
 
@@ -72,6 +82,44 @@ export function CreateJobModal({ isOpen, onClose }: CreateJobModalProps) {
   useEffect(() => {
     setPathInput(currentPath);
   }, [currentPath]);
+
+  // Handle preselected dataset
+  useEffect(() => {
+    if (preselectedDatasetId && isOpen) {
+      setSelectedDatasetId(preselectedDatasetId);
+      setUseDatasetFiles(true);
+    }
+  }, [preselectedDatasetId, isOpen]);
+
+  // Populate files from dataset when loaded
+  useEffect(() => {
+    if (datasetData && useDatasetFiles && datasetData.files) {
+      // Auto-populate job name from dataset name if empty
+      setJobName((prevName) => prevName || `${datasetData.name} - Processing`);
+
+      // Get all files that are ready for processing
+      // Priority: copied/extracted files, fallback to discovered files
+      let eligibleFiles = datasetData.files.filter(
+        (f) => f.status === 'copied' || f.status === 'extracted'
+      );
+
+      // Fallback to discovered files if no copied files exist
+      if (eligibleFiles.length === 0) {
+        eligibleFiles = datasetData.files.filter((f) => f.status === 'discovered');
+      }
+
+      // Construct full paths from source folder + relative path
+      const datasetFilePaths = eligibleFiles.map(
+        (f) => `${datasetData.source_folder}/${f.relative_path}`
+      );
+
+      if (datasetFilePaths.length > 0) {
+        setSelectedFiles(datasetFilePaths);
+        // Navigate to the dataset source folder in the file browser
+        setCurrentPath(datasetData.source_folder);
+      }
+    }
+  }, [datasetData, useDatasetFiles]);
 
   // Reset form when modal closes
   useEffect(() => {
@@ -89,7 +137,12 @@ export function CreateJobModal({ isOpen, onClose }: CreateJobModalProps) {
       setFrameSkip(1);
       setEnableTracking(true);
       setExport3DData(true);
+      setEnableDiversityFilter(false);
+      setDiversitySimilarityThreshold(0.85);
+      setDiversityMotionThreshold(0.02);
       setShowAdvanced(false);
+      setSelectedDatasetId(null);
+      setUseDatasetFiles(false);
     }
   }, [isOpen]);
 
@@ -224,6 +277,9 @@ export function CreateJobModal({ isOpen, onClose }: CreateJobModalProps) {
           enable_tracking: enableTracking,
           export_3d_data: export3DData,
           stages_to_run: selectedStages,
+          enable_diversity_filter: enableDiversityFilter,
+          diversity_similarity_threshold: diversitySimilarityThreshold,
+          diversity_motion_threshold: diversityMotionThreshold,
         },
       });
 
@@ -263,8 +319,43 @@ export function CreateJobModal({ isOpen, onClose }: CreateJobModalProps) {
           />
         </div>
 
+        {/* Dataset Source Info (when using preselected dataset) */}
+        {useDatasetFiles && datasetData && (
+          <div className="bg-primary-900/30 border border-primary-600/50 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <FolderIcon className="w-5 h-5 text-primary-400" />
+                <div>
+                  <span className="text-sm font-medium text-primary-300">
+                    Using files from: {datasetData.name}
+                  </span>
+                  <span className="block text-xs text-primary-400/80">
+                    {datasetData.files?.length || 0} files available
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setUseDatasetFiles(false);
+                  setSelectedDatasetId(null);
+                  setSelectedFiles([]);
+                }}
+                className="text-xs text-primary-400 hover:text-primary-300 underline"
+              >
+                Use file browser instead
+              </button>
+            </div>
+          </div>
+        )}
+        {datasetLoading && useDatasetFiles && (
+          <div className="flex items-center justify-center py-4">
+            <LoadingSpinner size="sm" />
+            <span className="ml-2 text-sm text-secondary-400">Loading dataset files...</span>
+          </div>
+        )}
+
         {/* File Browser */}
-        <div>
+        <div className={useDatasetFiles && datasetData ? 'opacity-50 pointer-events-none' : ''}>
           <div className="flex items-center justify-between mb-2">
             <label className="block text-sm font-medium text-secondary-300">
               Select SVO2 Files <span className="text-red-500">*</span> ({selectedFiles.length} selected)
@@ -622,6 +713,59 @@ export function CreateJobModal({ isOpen, onClose }: CreateJobModalProps) {
               />
               <p className="mt-1 text-xs text-secondary-500">Process every Nth frame</p>
             </div>
+          </div>
+
+          {/* Diversity Filter */}
+          <div className="mt-4 p-3 bg-secondary-800/50 rounded-lg border border-secondary-700">
+            <label className="flex items-center space-x-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={enableDiversityFilter}
+                onChange={(e) => setEnableDiversityFilter(e.target.checked)}
+                className="w-4 h-4 rounded border-secondary-700 bg-secondary-800 text-primary-600 focus:ring-primary-500"
+              />
+              <div>
+                <span className="text-sm font-medium text-secondary-300">Enable Frame Diversity Filter</span>
+                <p className="text-xs text-secondary-500">
+                  Automatically remove similar/redundant frames during extraction
+                </p>
+              </div>
+            </label>
+
+            {enableDiversityFilter && (
+              <div className="mt-3 pt-3 border-t border-secondary-700 grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-secondary-400 mb-1">
+                    Similarity Threshold
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={diversitySimilarityThreshold}
+                    onChange={(e) => setDiversitySimilarityThreshold(parseFloat(e.target.value))}
+                    className="w-full px-3 py-2 bg-secondary-800 border border-secondary-700 rounded-lg text-secondary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="mt-1 text-xs text-secondary-500">Higher = more strict (0.8-0.95)</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-secondary-400 mb-1">
+                    Motion Threshold
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="0.5"
+                    step="0.01"
+                    value={diversityMotionThreshold}
+                    onChange={(e) => setDiversityMotionThreshold(parseFloat(e.target.value))}
+                    className="w-full px-3 py-2 bg-secondary-800 border border-secondary-700 rounded-lg text-secondary-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="mt-1 text-xs text-secondary-500">Min motion to keep frame (0.01-0.1)</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

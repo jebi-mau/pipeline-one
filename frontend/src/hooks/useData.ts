@@ -1,5 +1,5 @@
 /**
- * Shalom - Data hooks using React Query for frame browsing and correlation
+ * Pipeline One - Data hooks using React Query for frame browsing and correlation
  */
 
 import { useQuery } from '@tanstack/react-query';

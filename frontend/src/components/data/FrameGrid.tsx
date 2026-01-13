@@ -1,5 +1,5 @@
 /**
- * Shalom - Frame Grid component for displaying frame thumbnails
+ * Pipeline One - Frame Grid component for displaying frame thumbnails
  */
 
 import { PhotoIcon, EyeIcon } from '@heroicons/react/24/outline';

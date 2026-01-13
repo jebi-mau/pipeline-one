@@ -1,5 +1,5 @@
 /**
- * Shalom - Configuration type definitions
+ * Pipeline One - Configuration type definitions
  */
 
 export interface ObjectClass {

@@ -1,5 +1,5 @@
 /**
- * Shalom - Error message component
+ * Pipeline One - Error message component
  */
 
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline';

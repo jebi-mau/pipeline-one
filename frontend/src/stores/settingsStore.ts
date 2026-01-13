@@ -1,5 +1,5 @@
 /**
- * Shalom - Settings store using Zustand with persistence
+ * Pipeline One - Settings store using Zustand with persistence
  */
 
 import { create } from 'zustand';
@@ -51,7 +51,7 @@ export const useSettingsStore = create<SettingsState>()(
       resetToDefaults: () => set(defaultSettings),
     }),
     {
-      name: 'svo2-sam3-settings',
+      name: 'pipeline-one-settings',
     }
   )
 );

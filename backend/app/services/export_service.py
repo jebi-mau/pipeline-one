@@ -34,15 +34,22 @@ class ExportService:
             return None
 
         # Check if export already exists
-        existing = await self.db.execute(
+        existing_result = await self.db.execute(
             select(Export).where(
                 Export.job_id == job_id,
                 Export.format == request.format,
             )
         )
-        if existing.scalar_one_or_none() is not None:
-            # Return existing export
-            pass
+        existing_export = existing_result.scalar_one_or_none()
+        if existing_export is not None:
+            # Return existing export instead of creating duplicate
+            return ExportResponse(
+                id=existing_export.id,
+                job_id=job_id,
+                format=existing_export.format,
+                status=existing_export.status,
+                created_at=existing_export.created_at,
+            )
 
         # Create export record
         export = Export(
@@ -133,5 +140,6 @@ class ExportService:
                 path.unlink()
 
         await self.db.delete(export)
+        await self.db.commit()
         logger.info(f"Deleted export {export.id} for job {job_id}")
         return True

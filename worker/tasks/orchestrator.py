@@ -7,6 +7,7 @@ from uuid import UUID
 from celery import chain, chord, group
 
 from worker.celery_app import app
+from worker.db import update_job_status, update_job_progress
 from worker.tasks.extraction import extract_svo2
 from worker.tasks.segmentation import run_segmentation
 from worker.tasks.reconstruction import run_reconstruction
@@ -105,6 +106,7 @@ def run_pipeline(
     object_classes: list[dict],
     config: dict,
     stages_to_run: list[str] | None = None,
+    dataset_file_mapping: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """
     Run the processing pipeline with selective stage execution.
@@ -121,6 +123,7 @@ def run_pipeline(
         object_classes: Object class definitions
         config: Processing configuration
         stages_to_run: List of stages to execute (default: all)
+        dataset_file_mapping: Optional mapping of SVO2 path to DatasetFile UUID for lineage
 
     Returns:
         Pipeline result summary
@@ -159,8 +162,14 @@ def run_pipeline(
 
     if "extraction" in stages_to_run:
         # Build extraction group for each SVO2 file
+        # Include dataset_file_id for lineage tracking if mapping provided
         extraction_tasks = group([
-            extract_svo2.s(job_id, svo2_file, extraction_config)
+            extract_svo2.s(
+                job_id,
+                svo2_file,
+                extraction_config,
+                dataset_file_mapping.get(svo2_file) if dataset_file_mapping else None,
+            )
             for svo2_file in svo2_files
         ])
         pipeline_tasks.append(extraction_tasks)
@@ -192,9 +201,14 @@ def run_pipeline(
         pipeline_completed.s(job_id, stages_to_run, STAGE_NUMBERS.get(final_stage, 1))
     )
 
-    # Build and execute the chain
+    # Build and execute the chain with error handling
     if pipeline_tasks:
-        pipeline = chain(*pipeline_tasks)
+        # Add error callback to each task in the chain
+        error_callback = pipeline_error_handler.s(job_id=job_id, stage=final_stage)
+        tasks_with_error_handling = [
+            task.on_error(error_callback) for task in pipeline_tasks
+        ]
+        pipeline = chain(*tasks_with_error_handling)
         pipeline.apply_async()
 
     logger.info(f"Pipeline dispatched for job {job_id}")
@@ -226,49 +240,26 @@ def pipeline_completed(
     Returns:
         Final pipeline result
     """
-    from datetime import datetime
-
-    from sqlalchemy import create_engine, text
-
     logger.info(f"Pipeline completed for job {job_id}")
     logger.info(f"Stages run: {stages_run}, final stage: {final_stage_num}")
 
-    # Update job status in database
-    try:
-        import os
+    # Update job status using shared database module
+    # Get total_detections from result (set by segmentation stage)
+    total_detections = prev_result.get("total_detections", 0) if prev_result else 0
+    update_job_status(
+        job_id=job_id,
+        status="completed",
+        total_detections=total_detections,
+    )
 
-        db_url = os.getenv(
-            "SYNC_DATABASE_URL",
-            "postgresql://svo2_analyzer:svo2_analyzer_dev@localhost:5432/svo2_analyzer"
-        )
-        engine = create_engine(db_url)
-        with engine.connect() as conn:
-            conn.execute(
-                text(
-                    """
-                    UPDATE processing_jobs
-                    SET status = :status,
-                        completed_at = :completed_at,
-                        current_stage = :final_stage,
-                        progress = 100.0,
-                        total_detections = :total_detections,
-                        updated_at = now()
-                    WHERE id = :job_id
-                    """
-                ),
-                {
-                    "status": "completed",
-                    "completed_at": datetime.utcnow(),
-                    # Set current_stage past the final stage so UI shows it as completed
-                    "final_stage": final_stage_num + 1,
-                    "total_detections": prev_result.get("total_tracks", 0) if prev_result else 0,
-                    "job_id": job_id,
-                },
-            )
-            conn.commit()
-        logger.info(f"Updated job {job_id} status to completed")
-    except Exception as e:
-        logger.error(f"Failed to update job status: {e}")
+    # Also update progress to ensure final stage is marked complete
+    update_job_progress(
+        job_id=job_id,
+        stage=final_stage_num + 1,  # Past final stage so UI shows completed
+        progress=100.0,
+    )
+
+    logger.info(f"Updated job {job_id} status to completed")
 
     if prev_result is None:
         return {
@@ -293,6 +284,7 @@ def run_stage(
     stage: str,
     config: dict,
     object_classes: list[dict] | None = None,
+    dataset_file_mapping: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """
     Run a single pipeline stage (dispatches async, does not wait).
@@ -302,6 +294,7 @@ def run_stage(
         stage: Stage name (extraction, segmentation, reconstruction, tracking)
         config: Stage configuration
         object_classes: Object classes (required for segmentation)
+        dataset_file_mapping: Optional mapping of SVO2 path to DatasetFile UUID for lineage
 
     Returns:
         Dispatch confirmation
@@ -312,7 +305,12 @@ def run_stage(
         # Get SVO2 files from job config
         svo2_files = config.get("svo2_files", [])
         tasks = group([
-            extract_svo2.s(job_id, f, config)
+            extract_svo2.s(
+                job_id,
+                f,
+                config,
+                dataset_file_mapping.get(f) if dataset_file_mapping else None,
+            )
             for f in svo2_files
         ])
         tasks.apply_async()
@@ -371,6 +369,49 @@ def get_pipeline_status(job_id: str) -> dict[str, Any]:
             "reconstruction": {"status": "pending", "progress": 0},
             "tracking": {"status": "pending", "progress": 0},
         },
+    }
+
+
+@app.task(bind=True, name="worker.tasks.orchestrator.pipeline_error_handler")
+def pipeline_error_handler(
+    self,
+    request,
+    exc,
+    traceback,
+    job_id: str,
+    stage: str = "unknown",
+) -> dict[str, Any]:
+    """
+    Error handler for pipeline task failures.
+
+    This task is called when any stage in the pipeline fails.
+
+    Args:
+        request: The failed task's request object
+        exc: The exception that was raised
+        traceback: The traceback string
+        job_id: Processing job UUID
+        stage: Stage that failed
+
+    Returns:
+        Error result dict
+    """
+    error_message = str(exc) if exc else "Unknown error"
+    logger.error(f"Pipeline failed for job {job_id} at stage {stage}: {error_message}")
+
+    # Update job status to failed
+    update_job_status(
+        job_id=job_id,
+        status="failed",
+        error_message=error_message,
+        error_stage=stage,
+    )
+
+    return {
+        "status": "failed",
+        "job_id": job_id,
+        "stage": stage,
+        "error": error_message,
     }
 
 

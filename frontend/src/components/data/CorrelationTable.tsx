@@ -1,5 +1,5 @@
 /**
- * Shalom - Correlation Table component showing data availability per frame
+ * Pipeline One - Correlation Table component showing data availability per frame
  */
 
 import { useState } from 'react';

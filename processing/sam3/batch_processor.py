@@ -135,9 +135,13 @@ class SAM3BatchProcessor:
             except Exception as e:
                 logger.error(f"Batch {batch_idx} failed: {e}")
                 failed += len(batch)
+                # Clear cache on error to recover memory
+                self._clear_gpu_cache()
 
-            # Memory management
+            # Memory management - check periodically and when memory is high
             if batch_idx > 0 and batch_idx % self.config.clear_cache_every == 0:
+                self._clear_gpu_cache()
+            elif not self._check_gpu_memory():
                 self._clear_gpu_cache()
 
         total_time_ms = (time.perf_counter() - start_time) * 1000
@@ -198,40 +202,45 @@ class SAM3BatchProcessor:
         registry: FrameRegistry,
         object_classes: list[dict],
     ) -> dict[str, SegmentationResult]:
-        """Process a batch of frames."""
+        """Process a batch of frames with memory-efficient image handling."""
         results = {}
-
-        # Load images
-        images = []
-        for frame in batch:
-            paths = registry.get_frame_paths(frame.frame_id)
-            image_path = paths.get("image_left")
-
-            if image_path is None or not image_path.exists():
-                logger.warning(f"Image not found for frame {frame.frame_id}")
-                results[frame.frame_id] = SegmentationResult(frame_id=frame.frame_id)
-                continue
-
-            image = cv2.imread(str(image_path))
-            if image is None:
-                logger.warning(f"Failed to load image: {image_path}")
-                results[frame.frame_id] = SegmentationResult(frame_id=frame.frame_id)
-                continue
-
-            # Convert BGR to RGB
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            images.append((frame.frame_id, image))
-
-        # Process images
         prompts = self._create_prompts(object_classes)
 
-        for frame_id, image in images:
+        # Process images one at a time to minimize memory footprint
+        for frame in batch:
+            image = None
             try:
-                result = self.predictor.predict(image, prompts, frame_id)
-                results[frame_id] = result
+                paths = registry.get_frame_paths(frame.frame_id)
+                image_path = paths.get("image_left")
+
+                if image_path is None or not image_path.exists():
+                    logger.warning(f"Image not found for frame {frame.frame_id}")
+                    results[frame.frame_id] = SegmentationResult(frame_id=frame.frame_id)
+                    continue
+
+                image = cv2.imread(str(image_path))
+                if image is None:
+                    logger.warning(f"Failed to load image: {image_path}")
+                    results[frame.frame_id] = SegmentationResult(frame_id=frame.frame_id)
+                    continue
+
+                # Convert BGR to RGB
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+                # Run inference
+                result = self.predictor.predict(image, prompts, frame.frame_id)
+                results[frame.frame_id] = result
+
             except Exception as e:
-                logger.error(f"Inference failed for {frame_id}: {e}")
-                results[frame_id] = SegmentationResult(frame_id=frame_id)
+                logger.error(f"Inference failed for {frame.frame_id}: {e}")
+                results[frame.frame_id] = SegmentationResult(frame_id=frame.frame_id)
+
+            finally:
+                # Explicit cleanup to release memory immediately
+                del image
+
+        # Clear GPU cache after each batch for better memory management
+        self._clear_gpu_cache()
 
         return results
 
@@ -268,7 +277,28 @@ class SAM3BatchProcessor:
         """Clear GPU memory cache."""
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()
             logger.debug("Cleared GPU cache")
+
+    def _check_gpu_memory(self) -> bool:
+        """
+        Check if GPU memory usage is within limits.
+
+        Returns:
+            True if memory is within limits, False if we should clear cache
+        """
+        if not torch.cuda.is_available():
+            return True
+
+        # Get current GPU memory usage in GB
+        allocated_gb = torch.cuda.memory_allocated() / (1024 ** 3)
+        max_allowed = self.config.max_memory_gb
+
+        if allocated_gb > max_allowed * 0.9:  # 90% threshold
+            logger.warning(f"GPU memory usage high: {allocated_gb:.2f}GB / {max_allowed}GB")
+            return False
+
+        return True
 
     def get_results(self) -> dict[str, SegmentationResult]:
         """Get all processing results."""

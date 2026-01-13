@@ -1,5 +1,5 @@
 /**
- * Shalom - Job Detail page with real data
+ * Pipeline One - Job Detail page with real data
  */
 
 import { useParams, Link } from 'react-router-dom';
@@ -7,7 +7,7 @@ import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useJob } from '../hooks/useJobs';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { ErrorMessage } from '../components/common/ErrorMessage';
-import { JobActions } from '../components/jobs/JobActions';
+import { JobActions, ETADisplay } from '../components/jobs';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-500',
@@ -103,6 +103,18 @@ export default function JobDetailPage() {
         </div>
       )}
 
+      {/* Time Estimate */}
+      {isActive && (
+        <div className="card p-6">
+          <h2 className="text-lg font-medium text-secondary-100 mb-4">Time Estimate</h2>
+          <ETADisplay
+            totalEta={job.eta_seconds}
+            stageEtas={job.stage_etas}
+            framesPerSecond={job.frames_per_second}
+          />
+        </div>
+      )}
+
       {/* Error Message */}
       {job.status === 'failed' && job.error_message && (
         <div className="card p-6 border border-red-500/50">
@@ -141,16 +153,16 @@ export default function JobDetailPage() {
                 </dd>
               </div>
             )}
-            {job.config?.sam3_confidence !== undefined && (
+            {job.config?.sam3_confidence_threshold !== undefined && (
               <div className="flex justify-between">
                 <dt className="text-secondary-400">Confidence Threshold</dt>
-                <dd className="text-secondary-100">{job.config.sam3_confidence}</dd>
+                <dd className="text-secondary-100">{job.config.sam3_confidence_threshold}</dd>
               </div>
             )}
-            {job.config?.batch_size !== undefined && (
+            {job.config?.sam3_batch_size !== undefined && (
               <div className="flex justify-between">
                 <dt className="text-secondary-400">Batch Size</dt>
-                <dd className="text-secondary-100">{job.config.batch_size}</dd>
+                <dd className="text-secondary-100">{job.config.sam3_batch_size}</dd>
               </div>
             )}
             {job.config?.frame_skip !== undefined && (

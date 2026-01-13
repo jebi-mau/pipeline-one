@@ -1,5 +1,5 @@
 /**
- * Shalom - Frame Viewer modal for displaying frame details
+ * Pipeline One - Frame Viewer modal for displaying frame details
  */
 
 import { useEffect, useState } from 'react';
@@ -279,11 +279,15 @@ export function FrameViewer({
                           </div>
                           <div className="flex items-center space-x-3 text-xs text-secondary-400">
                             <span>{(ann.confidence * 100).toFixed(1)}%</span>
-                            {ann.bbox_3d && (
-                              <span>
+                            {ann.distance !== null && ann.distance !== undefined ? (
+                              <span title="Center patch average depth">
+                                {ann.distance.toFixed(2)}m
+                              </span>
+                            ) : ann.bbox_3d ? (
+                              <span title="3D bounding box depth">
                                 {ann.bbox_3d.z.toFixed(1)}m
                               </span>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       );

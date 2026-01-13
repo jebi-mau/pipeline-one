@@ -1,5 +1,5 @@
 /**
- * Shalom - Stage Progress Bar component
+ * Pipeline One - Stage Progress Bar component
  * Shows pipeline stages with visual progress indicator
  */
 

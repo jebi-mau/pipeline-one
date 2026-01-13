@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     )
 
     # Application
-    app_name: str = "SVO2-SAM3 Analyzer"
+    app_name: str = "Pipeline One"
     app_env: Literal["development", "production", "testing"] = "development"
     debug: bool = True
 
@@ -104,6 +104,14 @@ class Settings(BaseSettings):
 
     # Frontend
     frontend_url: str = "http://localhost:3000"
+
+    # Storage optimization
+    # Point cloud format: "ply" (ASCII, large), "ply_binary" (binary, ~7x smaller), "npy", "bin"
+    default_point_cloud_format: str = "ply_binary"
+
+    # Disk space thresholds (in GB)
+    disk_space_error_threshold_gb: float = 10.0  # Block job creation below this
+    disk_space_warning_threshold_gb: float = 50.0  # Warn but allow
 
     @property
     def is_development(self) -> bool:

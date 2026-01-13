@@ -1,5 +1,5 @@
 /**
- * Shalom - Data type definitions for frame browsing and correlation
+ * Pipeline One - Data type definitions for frame browsing and correlation
  */
 
 export interface BBox2D {
@@ -28,6 +28,7 @@ export interface AnnotationSummary {
   bbox_3d: BBox3D | null;
   mask_url: string | null;
   track_id: string | null;
+  distance: number | null;  // Distance in meters (center patch average)
 }
 
 export interface FrameMetadataSummary {

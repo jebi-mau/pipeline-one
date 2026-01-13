@@ -1,5 +1,5 @@
 /**
- * Shalom - Data components index
+ * Pipeline One - Data components index
  */
 
 export { DataSummaryPanel } from './DataSummaryPanel';

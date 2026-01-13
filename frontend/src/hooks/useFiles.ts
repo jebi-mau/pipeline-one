@@ -1,5 +1,5 @@
 /**
- * Shalom - File browser hooks using React Query
+ * Pipeline One - File browser hooks using React Query
  */
 
 import { useQuery } from '@tanstack/react-query';

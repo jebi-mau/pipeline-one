@@ -58,6 +58,9 @@ class BBox3D:
     class_name: str = ""
     track_id: int = -1
 
+    # Distance from camera (meters) - average depth of center patch
+    distance: float | None = None
+
     def to_kitti_format(self) -> dict:
         """
         Convert to KITTI label format values.
@@ -396,6 +399,7 @@ class BBox3DEstimator:
             class_id=bbox.class_id,
             class_name=bbox.class_name,
             track_id=bbox.track_id,
+            distance=bbox.distance,
         )
 
     def estimate_from_detection(
@@ -427,6 +431,9 @@ class BBox3DEstimator:
         cam_intrinsics = CameraIntrinsics.from_calibration(intrinsics)
         projector = DepthProjector(cam_intrinsics)
 
+        # Calculate center patch distance (10% area at mask centroid)
+        distance = DepthProjector.calculate_center_patch_distance(mask, depth)
+
         # Project masked depth to 3D
         points = projector.project_depth_to_3d(depth, mask)
 
@@ -437,9 +444,15 @@ class BBox3DEstimator:
         points = DepthProjector.transform_camera_to_kitti(points)
 
         # Estimate bounding box
-        return self.estimate(
+        bbox = self.estimate(
             points,
             class_id=class_id,
             class_name=class_name,
             confidence=confidence,
         )
+
+        # Set the calculated distance
+        if bbox is not None:
+            bbox.distance = distance
+
+        return bbox

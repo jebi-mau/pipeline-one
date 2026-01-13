@@ -1,5 +1,5 @@
 /**
- * Shalom - Add Object Class Modal component
+ * Pipeline One - Add Object Class Modal component
  */
 
 import { useState } from 'react';

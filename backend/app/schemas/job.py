@@ -6,6 +6,18 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from backend.app.constants import DEFAULT_PIPELINE_STAGES
+
+
+class StageETA(BaseModel):
+    """ETA information for a pipeline stage."""
+
+    stage: str
+    stage_number: int
+    status: Literal["pending", "running", "completed", "skipped"]
+    eta_seconds: int | None = None
+    elapsed_seconds: int | None = None
+
 
 class JobConfig(BaseModel):
     """Job configuration settings."""
@@ -19,8 +31,25 @@ class JobConfig(BaseModel):
     enable_tracking: bool = True
     export_3d_data: bool = True
     stages_to_run: list[str] = Field(
-        default=["extraction", "segmentation", "reconstruction", "tracking"],
+        default_factory=lambda: DEFAULT_PIPELINE_STAGES.copy(),
         description="Pipeline stages to execute"
+    )
+    # Frame diversity filtering
+    enable_diversity_filter: bool = Field(
+        default=False,
+        description="Filter out similar/redundant frames during extraction"
+    )
+    diversity_similarity_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Threshold for visual similarity (higher = more strict)"
+    )
+    diversity_motion_threshold: float = Field(
+        default=0.02,
+        ge=0.0,
+        le=1.0,
+        description="Minimum motion required to keep a frame"
     )
 
 
@@ -28,9 +57,12 @@ class JobCreate(BaseModel):
     """Request schema for creating a new job."""
 
     name: str = Field(min_length=1, max_length=255)
-    input_paths: list[str] = Field(min_length=1, description="Paths to SVO2 files")
+    input_paths: list[str] = Field(default_factory=list, description="Paths to SVO2 files")
     output_directory: str | None = None
     config: JobConfig
+    dataset_id: str | None = Field(
+        default=None, description="Optional dataset ID to link job to dataset"
+    )
 
 
 class JobResponse(BaseModel):
@@ -45,17 +77,22 @@ class JobResponse(BaseModel):
     stage_progress: float = 0.0
     total_frames: int | None = None
     processed_frames: int | None = None
+    total_detections: int | None = None
     input_paths: list[str]
     output_directory: str | None = None
     config: JobConfig
     stages_to_run: list[str] = Field(
-        default=["extraction", "segmentation", "reconstruction", "tracking"]
+        default_factory=lambda: DEFAULT_PIPELINE_STAGES.copy()
     )
+    dataset_id: UUID | None = None
     error_message: str | None = None
     created_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    # ETA fields
     eta_seconds: int | None = None
+    stage_etas: list[StageETA] = Field(default_factory=list)
+    frames_per_second: float | None = None
 
 
 class JobListResponse(BaseModel):

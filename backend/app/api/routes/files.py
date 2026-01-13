@@ -1,5 +1,6 @@
 """File management API routes."""
 
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -11,9 +12,16 @@ from backend.app.schemas.file import DirectoryContents, FileMetadata
 router = APIRouter()
 settings = get_settings()
 
+# Development mode flag - only enable full filesystem access when explicitly set
+DEV_MODE = os.getenv("PIPELINE_DEV_MODE", "").lower() in ("true", "1", "yes")
+
 
 def get_allowed_roots() -> list[Path]:
-    """Get list of allowed root directories for browsing."""
+    """Get list of allowed root directories for browsing.
+
+    Security: By default, only configured directories and home are allowed.
+    Full filesystem access requires explicit PIPELINE_DEV_MODE=true environment variable.
+    """
     roots = []
     if settings.svo2_directory:
         roots.append(settings.svo2_directory)
@@ -23,7 +31,19 @@ def get_allowed_roots() -> list[Path]:
     home_dir = Path.home()
     roots.append(home_dir)
     # Allow common data locations
-    roots.append(Path("/"))  # Allow root for full filesystem access in dev mode
+    common_paths = [
+        Path("/data"),
+        Path("/mnt"),
+        Path("/media"),
+    ]
+    for p in common_paths:
+        if p.exists():
+            roots.append(p)
+
+    # SECURITY: Only allow root filesystem access in explicit dev mode
+    if DEV_MODE:
+        roots.append(Path("/"))
+
     return roots
 
 

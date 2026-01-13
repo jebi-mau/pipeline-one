@@ -1,5 +1,5 @@
 /**
- * Shalom - Job Report PDF component
+ * Pipeline One - Job Report PDF component
  * Generates a PDF document for job reports
  */
 
@@ -504,7 +504,7 @@ export function JobReportPDF({ job, results }: JobReportPDFProps) {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>SVO2-SAM3 Analyzer</Text>
+          <Text style={styles.footerText}>Pipeline One</Text>
           <Text style={styles.footerText}>
             Generated: {new Date().toLocaleString()}
           </Text>

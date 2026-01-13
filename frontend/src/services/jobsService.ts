@@ -1,5 +1,5 @@
 /**
- * Shalom - Jobs API service
+ * Pipeline One - Jobs API service
  */
 
 import api from './api';

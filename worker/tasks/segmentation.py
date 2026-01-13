@@ -5,12 +5,21 @@ from pathlib import Path
 from typing import Any
 
 from worker.celery_app import app
-from worker.tasks.extraction import update_job_progress
+from worker.db import update_job_progress
 
 logger = logging.getLogger(__name__)
 
 
-@app.task(bind=True, name="worker.tasks.segmentation.run_segmentation")
+@app.task(
+    bind=True,
+    name="worker.tasks.segmentation.run_segmentation",
+    max_retries=3,
+    default_retry_delay=60,
+    autoretry_for=(IOError, OSError, ConnectionError, RuntimeError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+)
 def run_segmentation(
     self,
     extraction_results: list[dict] | None,

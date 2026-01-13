@@ -1,5 +1,5 @@
 /**
- * Shalom - Loading spinner component
+ * Pipeline One - Loading spinner component
  */
 
 interface LoadingSpinnerProps {

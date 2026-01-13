@@ -1,5 +1,5 @@
 /**
- * Shalom - Job Actions component
+ * Pipeline One - Job Actions component
  */
 
 import { PlayIcon, PauseIcon, StopIcon, TrashIcon, ArrowPathIcon, DocumentChartBarIcon } from '@heroicons/react/24/outline';
