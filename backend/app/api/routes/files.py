@@ -1,13 +1,18 @@
 """File management API routes."""
 
+import logging
 import os
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.config import get_settings
+from backend.app.db.session import get_db
 from backend.app.schemas.file import DirectoryContents, FileMetadata
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 settings = get_settings()
@@ -205,4 +210,114 @@ async def validate_svo2_file(file_path: str) -> dict:
         "path": str(path),
         "valid": True,
         "message": "File validation not yet implemented",
+    }
+
+
+@router.get("/frame-count")
+async def get_frame_count(
+    paths: Annotated[
+        list[str],
+        Query(description="Paths to SVO2 files to count frames")
+    ],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """
+    Get total frame count for one or more SVO2 files.
+
+    This is a fast operation that first checks the database for cached
+    frame counts, then falls back to file size estimation if needed.
+    Avoids opening SVO2 files directly to prevent ZED SDK issues.
+
+    Returns:
+        - total_frames: Sum of all frames across provided files
+        - files: Per-file frame counts
+    """
+    from sqlalchemy import select, or_
+    from backend.app.models.dataset import DatasetFile
+
+    allowed_roots = get_allowed_roots()
+    files_result = []
+    total_frames = 0
+
+    # First, try to get frame counts from database (fast, no ZED SDK needed)
+    db_frame_counts = {}
+    if paths:
+        stmt = select(DatasetFile).where(
+            or_(
+                DatasetFile.original_path.in_(paths),
+                DatasetFile.renamed_path.in_(paths),
+            )
+        )
+        result = await db.execute(stmt)
+        db_files = result.scalars().all()
+
+        for db_file in db_files:
+            if db_file.frame_count:
+                db_frame_counts[db_file.original_path] = db_file.frame_count
+                if db_file.renamed_path:
+                    db_frame_counts[db_file.renamed_path] = db_file.frame_count
+
+    for file_path in paths:
+        path = Path(file_path)
+
+        # Security check
+        if not is_path_allowed(path, allowed_roots):
+            files_result.append({
+                "path": str(path),
+                "frame_count": None,
+                "error": "Access denied: File is outside allowed directories",
+            })
+            continue
+
+        if not path.exists():
+            files_result.append({
+                "path": str(path),
+                "frame_count": None,
+                "error": "File not found",
+            })
+            continue
+
+        if path.suffix.lower() != ".svo2":
+            files_result.append({
+                "path": str(path),
+                "frame_count": None,
+                "error": "File is not an SVO2 file",
+            })
+            continue
+
+        # Check database cache first
+        if file_path in db_frame_counts:
+            frame_count = db_frame_counts[file_path]
+            files_result.append({
+                "path": str(path),
+                "frame_count": frame_count,
+                "error": None,
+            })
+            total_frames += frame_count
+            logger.debug(f"Using cached frame count {frame_count} for {path.name}")
+            continue
+
+        # Fall back to file size estimation (avoid ZED SDK which may hang)
+        try:
+            file_size = path.stat().st_size
+            # Rough estimate: ~1MB per frame for typical SVO2 files
+            estimated_frames = max(file_size // (1024 * 1024), 100)
+            files_result.append({
+                "path": str(path),
+                "frame_count": estimated_frames,
+                "error": "Estimated from file size",
+            })
+            total_frames += estimated_frames
+            logger.info(f"Estimated {estimated_frames} frames for {path.name} based on file size")
+        except Exception as e:
+            logger.error(f"Error estimating frame count for {path}: {e}")
+            files_result.append({
+                "path": str(path),
+                "frame_count": None,
+                "error": str(e),
+            })
+
+    return {
+        "total_frames": total_frames,
+        "files": files_result,
     }

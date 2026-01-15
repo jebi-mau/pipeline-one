@@ -14,11 +14,14 @@ from backend.app.config import get_settings
 from backend.app.db.session import get_db
 from backend.app.models.job import ProcessingJob
 from backend.app.schemas.cleanup import (
+    BackfillResponse,
     CleanupResultResponse,
     DiskUsageResponse,
     OrphanedDirectoriesResponse,
     OrphanedDirectory,
+    StorageSummaryResponse,
 )
+from backend.app.services.storage_service import StorageService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -168,4 +171,49 @@ async def delete_orphaned_directories(db: Annotated[AsyncSession, Depends(get_db
         deleted_size_human=format_size(deleted_size),
         failed_count=failed_count,
         errors=errors,
+    )
+
+
+@router.get("/storage-summary", response_model=StorageSummaryResponse)
+async def get_storage_summary(db: Annotated[AsyncSession, Depends(get_db)]):
+    """
+    Get comprehensive storage breakdown by entity type.
+
+    Returns disk usage, per-entity storage totals, and warnings.
+    """
+    storage_service = StorageService(db)
+    summary = await storage_service.get_storage_summary()
+    return StorageSummaryResponse(**summary)
+
+
+@router.post("/backfill-storage", response_model=BackfillResponse)
+async def backfill_storage_sizes(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    dry_run: bool = True,
+):
+    """
+    Backfill storage_size_bytes for existing jobs and datasets.
+
+    Args:
+        dry_run: If True, only calculate sizes without updating database
+    """
+    storage_service = StorageService(db)
+
+    # Backfill jobs
+    job_result = await storage_service.backfill_job_sizes(dry_run=dry_run)
+
+    # Backfill datasets
+    dataset_result = await storage_service.backfill_dataset_sizes(dry_run=dry_run)
+
+    return BackfillResponse(
+        jobs_found=job_result["jobs_found"],
+        jobs_updated=job_result["jobs_updated"],
+        datasets_found=dataset_result["datasets_found"],
+        datasets_updated=dataset_result["datasets_updated"],
+        total_size_bytes=job_result["total_size_bytes"] + dataset_result["total_size_bytes"],
+        total_size_formatted=format_size(
+            job_result["total_size_bytes"] + dataset_result["total_size_bytes"]
+        ),
+        dry_run=dry_run,
+        errors=job_result["errors"] + dataset_result["errors"],
     )

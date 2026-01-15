@@ -65,6 +65,9 @@ export interface Job {
   input_files?: string[];
   object_classes?: string[];
   output_directory?: string | null;
+  // Storage tracking
+  storage_size_bytes?: number | null;
+  storage_size_formatted?: string | null;
   config?: JobConfig;
   stages_to_run?: PipelineStage[];
   dataset_id?: string | null;
@@ -118,3 +121,67 @@ export interface JobResults {
 
 // Alias for backward compatibility
 export type JobResponse = Job;
+
+// Pre-job duration estimation types
+
+export interface StageEstimate {
+  frames: number;
+  estimated_seconds: number;
+  fps: number;
+}
+
+export type EstimateConfidence = 'low' | 'medium' | 'high';
+
+export interface EstimateDurationRequest {
+  svo2_files: string[];
+  frame_skip?: number;
+  sam3_model_variant?: string;
+  stages_to_run?: PipelineStage[];
+  total_frames?: number;
+}
+
+export interface EstimateDurationResponse {
+  estimated_total_frames: number;
+  estimated_duration_seconds: number;
+  estimated_duration_formatted: string;
+  breakdown: Record<string, StageEstimate>;
+  confidence: EstimateConfidence;
+  based_on_jobs: number;
+}
+
+export interface FrameCountResponse {
+  total_frames: number;
+  files: Array<{
+    path: string;
+    frame_count: number | null;
+    error: string | null;
+  }>;
+}
+
+// Storage estimation types
+
+export interface EstimateStorageRequest {
+  total_frames: number;
+  stages_to_run?: PipelineStage[];
+  frame_skip?: number;
+  extract_point_clouds?: boolean;
+  extract_right_image?: boolean;
+  extract_masks?: boolean;
+  image_format?: string;
+}
+
+export interface EstimateStorageResponse {
+  estimated_bytes: number;
+  estimated_formatted: string;
+  available_bytes: number;
+  available_formatted: string;
+  sufficient_space: boolean;
+  warning: string | null;
+  details: {
+    frames_to_process: number;
+    stages: string[];
+    extract_point_clouds: boolean;
+    extract_right_image: boolean;
+    extract_masks: boolean;
+  };
+}

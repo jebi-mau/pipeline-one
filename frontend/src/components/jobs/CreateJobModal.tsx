@@ -1,5 +1,6 @@
 /**
  * Pipeline One - Create Job Modal component with enhanced file browser and full configuration
+ * Supports both wizard mode (guided) and advanced mode (full control)
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -9,6 +10,10 @@ import { useBrowseFiles } from '../../hooks/useFiles';
 import { useObjectClasses, useModelInfo } from '../../hooks/useConfig';
 import { useCreateJob, useStartJob } from '../../hooks/useJobs';
 import { useDataset } from '../../hooks/useDatasets';
+import { useJobEstimate } from '../../hooks/useJobEstimate';
+import { JobWizard, type JobWizardConfig } from './JobWizard';
+import { TimeEstimatePanel } from './TimeEstimatePanel';
+import { StorageEstimatePanel } from './StorageEstimatePanel';
 import {
   FolderIcon,
   DocumentIcon,
@@ -20,14 +25,19 @@ import {
   Cog6ToothIcon,
   CpuChipIcon,
   BeakerIcon,
+  SparklesIcon,
+  WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline';
 import type { PipelineStage } from '../../types/job';
 import { ALL_PIPELINE_STAGES, STAGE_INFO } from '../../types/job';
+
+type ViewMode = 'wizard' | 'advanced';
 
 interface CreateJobModalProps {
   isOpen: boolean;
   onClose: () => void;
   preselectedDatasetId?: string | null;
+  defaultMode?: ViewMode;
 }
 
 // Quick access locations
@@ -37,7 +47,10 @@ const QUICK_LOCATIONS = [
   { name: 'Project', path: '/home/atlas/dev/pipe1', icon: FolderIcon },
 ];
 
-export function CreateJobModal({ isOpen, onClose, preselectedDatasetId }: CreateJobModalProps) {
+export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultMode = 'wizard' }: CreateJobModalProps) {
+  // View mode
+  const [viewMode, setViewMode] = useState<ViewMode>(defaultMode);
+
   // Basic job settings
   const [jobName, setJobName] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
@@ -77,6 +90,26 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId }: Create
   const { data: datasetData, isLoading: datasetLoading } = useDataset(selectedDatasetId || undefined);
   const createJob = useCreateJob();
   const startJob = useStartJob();
+
+  // Pre-job time estimation
+  const {
+    estimate,
+    isLoading: isEstimateLoading,
+    isError: isEstimateError,
+    error: estimateError,
+    totalFrames,
+  } = useJobEstimate({
+    svo2Files: selectedFiles,
+    frameSkip,
+    modelVariant: selectedModel,
+    stagesToRun: selectedStages,
+    enabled: viewMode === 'advanced' && selectedFiles.length > 0,
+  });
+
+  // Handle frame skip suggestion from TimeEstimatePanel
+  const handleFrameSkipSuggestion = useCallback((suggestedSkip: number) => {
+    setFrameSkip(suggestedSkip);
+  }, []);
 
   // Sync path input when current path changes
   useEffect(() => {
@@ -143,8 +176,9 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId }: Create
       setShowAdvanced(false);
       setSelectedDatasetId(null);
       setUseDatasetFiles(false);
+      setViewMode(defaultMode);
     }
-  }, [isOpen]);
+  }, [isOpen, defaultMode]);
 
   // Set default model from API
   useEffect(() => {
@@ -302,8 +336,70 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId }: Create
   // Get selected model info
   const selectedModelInfo = modelInfo?.available_models.find(m => m.name === selectedModel);
 
+  // Handle wizard submit
+  const handleWizardSubmit = async (config: JobWizardConfig) => {
+    try {
+      const job = await createJob.mutateAsync({
+        name: config.name,
+        input_paths: config.input_paths,
+        config: config.config,
+      });
+
+      if (config.autoStart && job.id) {
+        await startJob.mutateAsync(job.id);
+      }
+
+      onClose();
+    } catch (error) {
+      console.error('Failed to create job:', error);
+    }
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Create New Job" size="xl">
+      {/* Mode Toggle */}
+      <div className="flex items-center justify-between mb-6 pb-4 border-b border-secondary-700">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode('wizard')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              viewMode === 'wizard'
+                ? 'bg-primary-600 text-white'
+                : 'bg-secondary-800 text-secondary-300 hover:bg-secondary-700'
+            }`}
+          >
+            <SparklesIcon className="w-4 h-4" />
+            Guided Setup
+          </button>
+          <button
+            onClick={() => setViewMode('advanced')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              viewMode === 'advanced'
+                ? 'bg-primary-600 text-white'
+                : 'bg-secondary-800 text-secondary-300 hover:bg-secondary-700'
+            }`}
+          >
+            <WrenchScrewdriverIcon className="w-4 h-4" />
+            Advanced
+          </button>
+        </div>
+        <span className="text-xs text-secondary-500">
+          {viewMode === 'wizard' ? 'Step-by-step configuration' : 'Full control over all settings'}
+        </span>
+      </div>
+
+      {/* Wizard Mode */}
+      {viewMode === 'wizard' && (
+        <JobWizard
+          onSubmit={handleWizardSubmit}
+          onCancel={onClose}
+          preselectedDatasetId={preselectedDatasetId}
+          isSubmitting={isSubmitting}
+        />
+      )}
+
+      {/* Advanced Mode */}
+      {viewMode === 'advanced' && (
       <div className="space-y-6 max-h-[80vh] overflow-y-auto pr-2">
         {/* Job Name */}
         <div>
@@ -675,6 +771,30 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId }: Create
           )}
         </div>
 
+        {/* Time Estimate Panel */}
+        {selectedFiles.length > 0 && (
+          <TimeEstimatePanel
+            estimate={estimate}
+            isLoading={isEstimateLoading}
+            isError={isEstimateError}
+            error={estimateError}
+            totalFrames={totalFrames}
+            frameSkip={frameSkip}
+            onFrameSkipSuggestion={handleFrameSkipSuggestion}
+          />
+        )}
+
+        {/* Storage Estimate Panel */}
+        {selectedFiles.length > 0 && totalFrames && totalFrames > 0 && (
+          <StorageEstimatePanel
+            totalFrames={totalFrames}
+            stagesToRun={selectedStages}
+            frameSkip={frameSkip}
+            extractPointClouds={export3DData}
+            extractMasks={true}
+          />
+        )}
+
         {/* Basic Configuration */}
         <div>
           <div className="flex items-center space-x-2 mb-3">
@@ -883,6 +1003,7 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId }: Create
           </button>
         </div>
       </div>
+      )}
     </Modal>
   );
 }

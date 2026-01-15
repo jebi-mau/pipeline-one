@@ -80,6 +80,8 @@ class JobResponse(BaseModel):
     total_detections: int | None = None
     input_paths: list[str]
     output_directory: str | None = None
+    storage_size_bytes: int | None = None
+    storage_size_formatted: str | None = None
     config: JobConfig
     stages_to_run: list[str] = Field(
         default_factory=lambda: DEFAULT_PIPELINE_STAGES.copy()
@@ -130,3 +132,85 @@ class JobResultsResponse(BaseModel):
     statistics: JobStatistics
     output_directory: str
     available_exports: list[str]
+
+
+# Pre-job duration estimation schemas
+
+
+class StageEstimate(BaseModel):
+    """Estimate for a single pipeline stage."""
+
+    frames: int = Field(description="Number of frames to process")
+    estimated_seconds: int = Field(description="Estimated duration in seconds")
+    fps: float = Field(description="Expected frames per second")
+
+
+class EstimateDurationRequest(BaseModel):
+    """Request schema for estimating job duration before starting."""
+
+    svo2_files: list[str] = Field(
+        description="Paths to SVO2 files (used to calculate total frames)"
+    )
+    frame_skip: int = Field(default=1, ge=1, description="Frame skip setting")
+    sam3_model_variant: str = Field(
+        default="sam3_hiera_large",
+        description="SAM3 model variant affects segmentation speed"
+    )
+    stages_to_run: list[str] = Field(
+        default_factory=lambda: ["extraction", "segmentation", "reconstruction", "tracking"],
+        description="Pipeline stages to estimate"
+    )
+    # Optional: if total_frames already known, skip frame counting
+    total_frames: int | None = Field(
+        default=None,
+        description="If provided, skip frame counting from files"
+    )
+
+
+class EstimateDurationResponse(BaseModel):
+    """Response schema for job duration estimate."""
+
+    estimated_total_frames: int = Field(description="Total frames to process after frame_skip")
+    estimated_duration_seconds: int = Field(description="Total estimated duration")
+    estimated_duration_formatted: str = Field(
+        description="Human-readable duration (e.g., '~7 min')"
+    )
+    breakdown: dict[str, StageEstimate] = Field(
+        description="Per-stage duration breakdown"
+    )
+    confidence: Literal["low", "medium", "high"] = Field(
+        description="Estimate confidence based on historical data"
+    )
+    based_on_jobs: int = Field(
+        description="Number of historical jobs used for benchmark"
+    )
+
+
+# Storage estimation schemas
+
+
+class EstimateStorageRequest(BaseModel):
+    """Request schema for estimating job storage before creation."""
+
+    total_frames: int = Field(description="Total frames in input files")
+    stages_to_run: list[str] = Field(
+        default_factory=lambda: ["extraction", "segmentation", "reconstruction", "tracking"],
+        description="Pipeline stages to run"
+    )
+    frame_skip: int = Field(default=1, ge=1, description="Frame skip setting")
+    extract_point_clouds: bool = Field(default=True, description="Whether to extract point clouds")
+    extract_right_image: bool = Field(default=True, description="Whether to extract right camera image")
+    extract_masks: bool = Field(default=True, description="Whether to save segmentation masks")
+    image_format: str = Field(default="png", description="Image format (png or jpg)")
+
+
+class EstimateStorageResponse(BaseModel):
+    """Response schema for job storage estimate."""
+
+    estimated_bytes: int = Field(description="Estimated storage in bytes")
+    estimated_formatted: str = Field(description="Human-readable size (e.g., '25.5 GB')")
+    available_bytes: int = Field(description="Available disk space in bytes")
+    available_formatted: str = Field(description="Human-readable available space")
+    sufficient_space: bool = Field(description="Whether there's enough space for the job")
+    warning: str | None = Field(default=None, description="Warning message if space is low")
+    details: dict = Field(description="Breakdown of estimation parameters")

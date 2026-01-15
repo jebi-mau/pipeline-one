@@ -10,8 +10,11 @@ import {
   CircleStackIcon,
   FolderIcon,
   ChevronRightIcon,
+  CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
+import { useNavigate } from 'react-router-dom';
+import { StorageIndicator } from '../common/StorageIndicator';
 
 // Workflow-oriented navigation structure
 const pipelineSteps = [
@@ -29,9 +32,15 @@ const pipelineSteps = [
   },
   {
     name: '3. Review',
-    description: 'Filter & Export',
+    description: 'Filter & Curate',
     href: '/review',
     icon: CircleStackIcon,
+  },
+  {
+    name: '4. Curated',
+    description: 'Export Training',
+    href: '/curated-datasets',
+    icon: CheckCircleIcon,
   },
 ];
 
@@ -41,12 +50,15 @@ const utilityNav = [
 
 export default function MainLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Determine current pipeline step for progress indicator
   const getCurrentStep = () => {
     if (location.pathname.startsWith('/datasets')) return 0;
     if (location.pathname.startsWith('/jobs')) return 1;
     if (location.pathname.startsWith('/review')) return 2;
+    if (location.pathname.startsWith('/curated-datasets')) return 3;
+    if (location.pathname.startsWith('/training-datasets')) return 3;
     if (location.pathname.startsWith('/data')) return 2; // Legacy data explorer
     return -1;
   };
@@ -218,6 +230,7 @@ export default function MainLayout() {
             <span className="text-xs text-secondary-400 bg-secondary-700 px-2 py-1 rounded">
               100% Local Processing
             </span>
+            <StorageIndicator onClick={() => navigate('/settings#storage')} />
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               <span className="text-xs text-secondary-400">GPU Ready</span>
@@ -239,6 +252,8 @@ function getPageTitle(pathname: string): string {
   if (pathname.startsWith('/datasets')) return 'Step 1: Import SVO2 Files';
   if (pathname.startsWith('/jobs')) return 'Step 2: Process & Detect';
   if (pathname.startsWith('/review')) return 'Step 3: Review & Filter';
+  if (pathname.startsWith('/curated-datasets')) return 'Step 4: Curated Datasets';
+  if (pathname.startsWith('/training-datasets')) return 'Training Datasets';
   if (pathname.startsWith('/data')) return 'Data Explorer';
   if (pathname.startsWith('/frames')) return 'Frame Details';
   if (pathname.startsWith('/settings')) return 'Settings';

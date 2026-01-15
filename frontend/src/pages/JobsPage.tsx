@@ -260,6 +260,9 @@ export default function JobsPage() {
                     Frames
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-secondary-300 uppercase tracking-wider">
+                    Size
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-secondary-300 uppercase tracking-wider">
                     ETA
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-secondary-300 uppercase tracking-wider">
@@ -325,6 +328,11 @@ export default function JobsPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-300">
                         {job.processed_frames?.toLocaleString() || 0} /{' '}
                         {job.total_frames?.toLocaleString() || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-300">
+                        {job.status === 'completed' && job.storage_size_formatted
+                          ? job.storage_size_formatted
+                          : <span className="text-secondary-500">-</span>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         {job.status === 'running' || job.status === 'paused' ? (

@@ -1,11 +1,12 @@
 """SAM 3 segmentation task."""
 
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
 from worker.celery_app import app
-from worker.db import update_job_progress
+from worker.db import update_job_progress, record_stage_completion
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,9 @@ def run_segmentation(
     from processing.svo2.frame_registry import FrameRegistry
 
     logger.info(f"Running segmentation for job {job_id}")
+
+    # Track stage timing
+    stage_start_time = time.time()
 
     # Get frame registries from extraction results
     if extraction_results is None:
@@ -148,13 +152,26 @@ def run_segmentation(
         # Unload model
         predictor.unload()
 
-        logger.info(f"Segmentation complete: {total_detections} detections in {total_frames} frames")
+        # Record stage duration for benchmarking
+        stage_duration = time.time() - stage_start_time
+        record_stage_completion(
+            job_id=job_id,
+            stage="segmentation",
+            duration_seconds=stage_duration,
+            total_frames=total_frames,
+        )
+
+        logger.info(
+            f"Segmentation complete: {total_detections} detections in {total_frames} frames "
+            f"({stage_duration:.1f}s, {total_frames / stage_duration:.2f} fps)"
+        )
 
         return {
             "status": "completed",
             "total_frames": total_frames,
             "total_detections": total_detections,
             "registries": [str(p) for p in registries],
+            "duration_seconds": stage_duration,
         }
 
     except Exception as e:

@@ -22,7 +22,7 @@ try:
     SAM3_AVAILABLE = True
 except ImportError:
     SAM3_AVAILABLE = False
-    logger.warning("SAM 3 not available - install with: pip install -e /tmp/sam3")
+    logger.warning("SAM 3 not available - install with: pip install /home/atlas/dev/sam3")
 
 
 @dataclass

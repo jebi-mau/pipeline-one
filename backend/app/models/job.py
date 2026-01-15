@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -67,6 +67,9 @@ class ProcessingJob(Base, UUIDMixin, TimestampMixin):
     input_paths: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     output_directory: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Storage tracking (populated after job completion)
+    storage_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
     # Pipeline stages to execute
     stages_to_run: Mapped[list[str]] = mapped_column(
         JSONB,
@@ -113,6 +116,16 @@ class ProcessingJob(Base, UUIDMixin, TimestampMixin):
     processed_frames: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_detections: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Per-stage duration tracking (filled on stage completion)
+    extraction_duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    segmentation_duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reconstruction_duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tracking_duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Per-stage FPS (frames per second) for benchmarking
+    extraction_fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    segmentation_fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     # Relationships
     frames: Mapped[list["Frame"]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
@@ -135,3 +148,27 @@ class ProcessingJob(Base, UUIDMixin, TimestampMixin):
             4: "tracking",
         }
         return stage_names.get(self.current_stage)
+
+
+class JobPerformanceBenchmark(Base, UUIDMixin, TimestampMixin):
+    """Performance benchmarks by model variant for ETA estimation.
+
+    This table stores aggregated performance metrics from completed jobs,
+    allowing pre-job time estimation based on historical data.
+    """
+
+    __tablename__ = "job_performance_benchmarks"
+
+    # Model configuration (unique key)
+    sam3_model_variant: Mapped[str] = mapped_column(
+        String(50), nullable=False, unique=True, index=True
+    )
+
+    # Average FPS by stage
+    avg_extraction_fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_segmentation_fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_reconstruction_fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_tracking_fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Number of jobs used to compute this benchmark
+    sample_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

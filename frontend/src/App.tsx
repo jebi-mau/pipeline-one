@@ -8,6 +8,8 @@ import DatasetDetailPage from './pages/DatasetDetailPage'
 import FrameDetailPage from './pages/FrameDetailPage'
 import DataPage from './pages/DataPage'
 import ReviewPage from './pages/ReviewPage'
+import CuratedDatasetListPage from './pages/CuratedDatasetListPage'
+import CuratedDatasetDetailPage from './pages/CuratedDatasetDetailPage'
 import SettingsPage from './pages/SettingsPage'
 import { ErrorBoundary } from './components/common'
 
@@ -24,6 +26,9 @@ function App() {
           <Route path="frames/:frameId" element={<ErrorBoundary><FrameDetailPage /></ErrorBoundary>} />
           <Route path="data" element={<ErrorBoundary><DataPage /></ErrorBoundary>} />
           <Route path="review" element={<ErrorBoundary><ReviewPage /></ErrorBoundary>} />
+          <Route path="review/:jobId" element={<ErrorBoundary><ReviewPage /></ErrorBoundary>} />
+          <Route path="curated-datasets" element={<ErrorBoundary><CuratedDatasetListPage /></ErrorBoundary>} />
+          <Route path="curated-datasets/:id" element={<ErrorBoundary><CuratedDatasetDetailPage /></ErrorBoundary>} />
           <Route path="settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
         </Route>
       </Routes>

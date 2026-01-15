@@ -1,19 +1,51 @@
 """Pipeline orchestrator task for coordinating processing stages."""
 
 import logging
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from celery import chain, chord, group
 
 from worker.celery_app import app
-from worker.db import update_job_status, update_job_progress
+from worker.db import (
+    update_job_status,
+    update_job_progress,
+    get_job_performance_data,
+    update_performance_benchmark,
+    get_job_output_directory,
+    update_job_storage_size,
+)
 from worker.tasks.extraction import extract_svo2
 from worker.tasks.segmentation import run_segmentation
 from worker.tasks.reconstruction import run_reconstruction
 from worker.tasks.tracking import run_tracking
 
 logger = logging.getLogger(__name__)
+
+
+def get_directory_size(path: Path) -> int:
+    """
+    Calculate total size of a directory recursively.
+
+    Args:
+        path: Directory path to calculate size of
+
+    Returns:
+        Total size in bytes
+    """
+    total = 0
+    try:
+        for entry in path.rglob("*"):
+            if entry.is_file():
+                try:
+                    total += entry.stat().st_size
+                except (OSError, PermissionError):
+                    pass
+    except Exception as e:
+        logger.warning(f"Error calculating directory size for {path}: {e}")
+    return total
+
 
 # Stage weights for progress calculation (must sum to 1.0)
 STAGE_WEIGHTS = {
@@ -260,6 +292,34 @@ def pipeline_completed(
     )
 
     logger.info(f"Updated job {job_id} status to completed")
+
+    # Update performance benchmarks with data from this job
+    try:
+        perf_data = get_job_performance_data(job_id)
+        if perf_data and perf_data.get("model_variant"):
+            update_performance_benchmark(
+                model_variant=perf_data["model_variant"],
+                extraction_fps=perf_data.get("extraction_fps"),
+                segmentation_fps=perf_data.get("segmentation_fps"),
+            )
+            logger.info(f"Updated performance benchmarks from job {job_id}")
+    except Exception as e:
+        logger.warning(f"Failed to update performance benchmarks: {e}")
+
+    # Calculate and store output directory size
+    try:
+        output_dir = get_job_output_directory(job_id)
+        if output_dir:
+            output_path = Path(output_dir)
+            if output_path.exists():
+                storage_size = get_directory_size(output_path)
+                update_job_storage_size(job_id, storage_size)
+            else:
+                logger.warning(f"Output directory does not exist: {output_dir}")
+        else:
+            logger.warning(f"No output directory found for job {job_id}")
+    except Exception as e:
+        logger.warning(f"Failed to calculate storage size for job {job_id}: {e}")
 
     if prev_result is None:
         return {

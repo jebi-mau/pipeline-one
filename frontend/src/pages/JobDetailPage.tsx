@@ -111,6 +111,9 @@ export default function JobDetailPage() {
             totalEta={job.eta_seconds}
             stageEtas={job.stage_etas}
             framesPerSecond={job.frames_per_second}
+            totalFrames={job.total_frames}
+            processedFrames={job.processed_frames}
+            currentStageName={job.current_stage_name}
           />
         </div>
       )}
@@ -220,6 +223,14 @@ export default function JobDetailPage() {
                   {job.output_directory}
                 </dd>
               </div>
+              {job.storage_size_formatted && (
+                <div>
+                  <dt className="text-secondary-400 text-sm">Storage Size</dt>
+                  <dd className="text-secondary-100 text-sm font-medium">
+                    {job.storage_size_formatted}
+                  </dd>
+                </div>
+              )}
             </dl>
           </div>
         )}

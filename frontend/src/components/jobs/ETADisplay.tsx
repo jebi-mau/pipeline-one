@@ -12,6 +12,12 @@ interface ETADisplayProps {
   stageEtas?: StageETA[];
   framesPerSecond?: number | null;
   compact?: boolean;
+  // Additional context for better status messages
+  totalFrames?: number | null;
+  processedFrames?: number | null;
+  currentStageName?: string | null;
+  /** Estimate confidence: 'calculating' | 'estimated' | 'accurate' */
+  confidence?: 'calculating' | 'estimated' | 'accurate';
 }
 
 /**
@@ -69,12 +75,78 @@ function getStatusColor(status: string): string {
   }
 }
 
+/**
+ * Get a friendly message for the current state when ETA is not yet available
+ */
+function getEstimatingMessage(
+  currentStageName?: string | null,
+  totalFrames?: number | null,
+  processedFrames?: number | null,
+  framesPerSecond?: number | null
+): string {
+  // If we have frames per second, we should have ETA - this is a fallback
+  if (framesPerSecond && framesPerSecond > 0) {
+    return 'Finalizing estimate...';
+  }
+
+  // If we know total frames but haven't started processing
+  if (totalFrames && (!processedFrames || processedFrames === 0)) {
+    const stageName = currentStageName ? STAGE_INFO[currentStageName as PipelineStage]?.name || currentStageName : 'extraction';
+    return `Starting ${stageName}...`;
+  }
+
+  // If we're processing but don't have a rate yet
+  if (processedFrames && processedFrames > 0 && totalFrames) {
+    const percent = Math.round((processedFrames / totalFrames) * 100);
+    return `Processing... (${percent}% complete)`;
+  }
+
+  // Early stages - just starting
+  if (currentStageName) {
+    const stageName = STAGE_INFO[currentStageName as PipelineStage]?.name || currentStageName;
+    return `Starting ${stageName}...`;
+  }
+
+  return 'Initializing...';
+}
+
+/**
+ * Get confidence indicator
+ */
+function ConfidenceIndicator({ confidence }: { confidence: 'calculating' | 'estimated' | 'accurate' }) {
+  const config = {
+    calculating: { color: 'text-yellow-500', label: 'Calculating', dot: 'bg-yellow-500 animate-pulse' },
+    estimated: { color: 'text-blue-400', label: 'Estimated', dot: 'bg-blue-400' },
+    accurate: { color: 'text-green-400', label: 'Based on current rate', dot: 'bg-green-400' },
+  };
+
+  const { color, label, dot } = config[confidence];
+
+  return (
+    <div className={`flex items-center gap-1.5 text-xs ${color}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+      {label}
+    </div>
+  );
+}
+
 export function ETADisplay({
   totalEta,
   stageEtas = [],
   framesPerSecond,
   compact = false,
+  totalFrames,
+  processedFrames,
+  currentStageName,
+  confidence,
 }: ETADisplayProps) {
+  // Determine confidence if not provided
+  const effectiveConfidence = confidence || (
+    framesPerSecond && framesPerSecond > 0 ? 'accurate' :
+    totalEta !== null && totalEta !== undefined ? 'estimated' :
+    'calculating'
+  );
+
   if (compact) {
     // Compact mode - just show total ETA
     if (totalEta === null || totalEta === undefined) {
@@ -88,30 +160,47 @@ export function ETADisplay({
     );
   }
 
+  const hasEta = totalEta !== null && totalEta !== undefined;
+  const hasRate = framesPerSecond !== null && framesPerSecond !== undefined && framesPerSecond > 0;
+
   return (
     <div className="space-y-4">
       {/* Total ETA and Processing Rate */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <ClockIcon className="w-5 h-5 text-primary-400" />
+          <div className={`p-2 rounded-lg ${hasEta ? 'bg-primary-500/10' : 'bg-secondary-700/50'}`}>
+            <ClockIcon className={`w-5 h-5 ${hasEta ? 'text-primary-400' : 'text-secondary-400 animate-pulse'}`} />
+          </div>
           <div>
-            <span className="text-sm text-secondary-400">Estimated Time</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-secondary-400">Estimated Time</span>
+              {hasEta && <ConfidenceIndicator confidence={effectiveConfidence} />}
+            </div>
             <div className="text-lg font-semibold text-secondary-100">
-              {totalEta !== null && totalEta !== undefined
+              {hasEta
                 ? `${formatDuration(totalEta)} remaining`
-                : 'Calculating...'}
+                : getEstimatingMessage(currentStageName, totalFrames, processedFrames, framesPerSecond)}
             </div>
           </div>
         </div>
 
-        {framesPerSecond !== null && framesPerSecond !== undefined && framesPerSecond > 0 && (
-          <div className="text-right">
-            <span className="text-sm text-secondary-400">Processing Rate</span>
-            <div className="text-lg font-semibold text-secondary-100">
-              {framesPerSecond.toFixed(1)} frames/sec
-            </div>
-          </div>
-        )}
+        <div className="text-right">
+          {hasRate ? (
+            <>
+              <span className="text-sm text-secondary-400">Processing Rate</span>
+              <div className="text-lg font-semibold text-secondary-100">
+                {framesPerSecond.toFixed(1)} frames/sec
+              </div>
+            </>
+          ) : totalFrames ? (
+            <>
+              <span className="text-sm text-secondary-400">Total Frames</span>
+              <div className="text-lg font-semibold text-secondary-100">
+                {processedFrames ? `${processedFrames} / ` : ''}{totalFrames}
+              </div>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {/* Per-Stage Breakdown */}
@@ -150,7 +239,7 @@ export function ETADisplay({
                         {stage.eta_seconds !== null ? (
                           <span>{formatDuration(stage.eta_seconds)} left</span>
                         ) : (
-                          <span>calculating...</span>
+                          <span className="animate-pulse">measuring rate...</span>
                         )}
                       </span>
                     )}

@@ -6,6 +6,7 @@ from backend.app.api.routes import (
     annotations,
     cleanup,
     config,
+    curated_datasets,
     data,
     datasets,
     export,
@@ -21,6 +22,7 @@ api_router = APIRouter()
 api_router.include_router(files.router, prefix="/files", tags=["files"])
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 api_router.include_router(datasets.router, prefix="/datasets", tags=["datasets"])
+api_router.include_router(curated_datasets.router, tags=["curated-datasets"])
 api_router.include_router(annotations.router, tags=["annotations"])
 api_router.include_router(config.router, prefix="/config", tags=["config"])
 api_router.include_router(export.router, prefix="/export", tags=["export"])

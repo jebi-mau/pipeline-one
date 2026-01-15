@@ -3,7 +3,15 @@
  */
 
 import api from './api';
-import type { Job, JobCreate, JobListResponse, JobStatusUpdate, JobResults } from '../types';
+import type {
+  Job,
+  JobCreate,
+  JobListResponse,
+  JobStatusUpdate,
+  JobResults,
+  EstimateDurationRequest,
+  EstimateDurationResponse
+} from '../types';
 
 export const jobsService = {
   list: async (params?: { status?: string; limit?: number; offset?: number }): Promise<JobListResponse> => {
@@ -52,6 +60,15 @@ export const jobsService = {
 
   getResults: async (jobId: string): Promise<JobResults> => {
     const { data } = await api.get(`/jobs/${jobId}/results`);
+    return data;
+  },
+
+  /**
+   * Estimate job duration before starting.
+   * Uses historical performance benchmarks to calculate expected processing time.
+   */
+  estimateDuration: async (request: EstimateDurationRequest): Promise<EstimateDurationResponse> => {
+    const { data } = await api.post('/jobs/estimate-duration', request);
     return data;
   },
 };

@@ -505,11 +505,36 @@ class JobService:
             "reconstruction": 3,
             "tracking": 4,
         }
+        # Default FPS benchmarks by stage and model variant
+        # These are used for early estimates before real-time data is available
+        DEFAULT_FPS = {
+            "extraction": 30.0,  # Relatively constant for all models
+            "segmentation": {
+                "sam3_hiera_tiny": 2.5,
+                "sam3_hiera_small": 1.5,
+                "sam3_hiera_large": 0.5,
+                "default": 1.0,
+            },
+            "reconstruction": 50.0,  # Fast GPU-based depth processing
+            "tracking": 100.0,  # Very fast association step
+        }
 
         stages_to_run = job.stages_to_run or DEFAULT_PIPELINE_STAGES
         stage_etas: list[StageETA] = []
         total_eta_seconds: int | None = None
         frames_per_second = getattr(job, 'frames_per_second', None)
+
+        # Get model variant for segmentation FPS lookup
+        model_variant = "default"
+        if hasattr(job, 'config') and job.config:
+            model_variant = job.config.sam3_model_variant or "default"
+
+        def get_default_fps(stage_name: str) -> float:
+            """Get default FPS for a stage."""
+            fps = DEFAULT_FPS.get(stage_name, 1.0)
+            if isinstance(fps, dict):
+                return fps.get(model_variant, fps.get("default", 1.0))
+            return fps
 
         now = datetime.now(timezone.utc)
 
@@ -546,6 +571,10 @@ class JobService:
         current_stage_name = job.current_stage_name
         stage_started_at = getattr(job, 'stage_started_at', None)
 
+        # Use started_at as fallback for stage 1 if stage_started_at not set
+        if stage_started_at is None and job.started_at and job.current_stage == 1:
+            stage_started_at = job.started_at
+
         # Calculate current stage elapsed time
         current_elapsed_seconds = (
             int((now - stage_started_at).total_seconds())
@@ -553,16 +582,37 @@ class JobService:
             else None
         )
 
+        # Calculate actual FPS from elapsed time and processed frames
+        actual_fps = None
+        if current_elapsed_seconds and current_elapsed_seconds > 0 and job.processed_frames:
+            actual_fps = job.processed_frames / current_elapsed_seconds
+            # Update frames_per_second for response
+            frames_per_second = round(actual_fps, 2)
+
         # Calculate rate and ETA if we have data
         current_stage_eta = None
-        if (
+        use_default_estimate = False
+
+        if actual_fps and actual_fps > 0 and job.total_frames and job.processed_frames is not None:
+            # Use real-time FPS for accurate estimate
+            remaining_frames = job.total_frames - job.processed_frames
+            current_stage_eta = int(remaining_frames / actual_fps)
+        elif (
             frames_per_second
             and frames_per_second > 0
             and job.total_frames
             and job.processed_frames is not None
         ):
+            # Use stored FPS if actual calculation not possible
             remaining_frames = job.total_frames - job.processed_frames
             current_stage_eta = int(remaining_frames / frames_per_second)
+        elif job.total_frames and job.total_frames > 0:
+            # Fallback to default benchmarks for early estimate
+            use_default_estimate = True
+            default_fps = get_default_fps(current_stage_name or "extraction")
+            processed = job.processed_frames or 0
+            remaining_frames = job.total_frames - processed
+            current_stage_eta = int(remaining_frames / default_fps)
 
         # Determine which stage index we're on
         current_stage_idx = (
@@ -571,22 +621,29 @@ class JobService:
             else 0
         )
 
-        # Calculate remaining stages ETA based on weights
+        # Calculate remaining stages ETA based on weights or default benchmarks
         remaining_stages_eta = 0
-        if current_elapsed_seconds and current_elapsed_seconds > 0 and job.processed_frames:
-            # Calculate time per frame from current stage
-            time_per_frame = current_elapsed_seconds / job.processed_frames
-            total_frames = job.total_frames or job.processed_frames
+        total_frames = job.total_frames or job.processed_frames or 0
 
-            # Estimate remaining stages
+        if current_elapsed_seconds and current_elapsed_seconds > 0 and job.processed_frames:
+            # Use actual rate for estimation
+            time_per_frame = current_elapsed_seconds / job.processed_frames
+
+            # Estimate remaining stages using weight ratios
             for i, stage_name in enumerate(stages_to_run):
                 if i > current_stage_idx:
                     weight_ratio = (
                         STAGE_WEIGHTS.get(stage_name, 0.25)
                         / STAGE_WEIGHTS.get(current_stage_name, 0.25)
                     )
-                    # Estimate based on current rate and weight ratio
                     stage_eta = int(time_per_frame * total_frames * weight_ratio)
+                    remaining_stages_eta += stage_eta
+        elif use_default_estimate and total_frames > 0:
+            # Use default benchmarks for remaining stages
+            for i, stage_name in enumerate(stages_to_run):
+                if i > current_stage_idx:
+                    default_fps = get_default_fps(stage_name)
+                    stage_eta = int(total_frames / default_fps)
                     remaining_stages_eta += stage_eta
 
         # Build stage ETAs
@@ -612,16 +669,19 @@ class JobService:
                     elapsed_seconds=current_elapsed_seconds,
                 ))
             else:
-                # Future stage - estimate based on weight ratio
+                # Future stage - estimate based on weight ratio or default benchmarks
                 stage_eta = None
                 if current_elapsed_seconds and current_elapsed_seconds > 0 and job.processed_frames:
                     time_per_frame = current_elapsed_seconds / job.processed_frames
-                    total_frames = job.total_frames or job.processed_frames
                     weight_ratio = (
                         STAGE_WEIGHTS.get(stage_name, 0.25)
                         / STAGE_WEIGHTS.get(current_stage_name, 0.25)
                     )
                     stage_eta = int(time_per_frame * total_frames * weight_ratio)
+                elif use_default_estimate and total_frames > 0:
+                    # Use default FPS for this stage
+                    default_fps = get_default_fps(stage_name)
+                    stage_eta = int(total_frames / default_fps)
 
                 stage_etas.append(StageETA(
                     stage=stage_name,

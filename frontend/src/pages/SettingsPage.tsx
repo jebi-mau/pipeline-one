@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useObjectClasses, useSystemConfig, useModelInfo } from '../hooks/useConfig';
 import { useSettingsStore } from '../stores/settingsStore';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
+import { StorageDashboard } from '../components/common/StorageDashboard';
 import { AddClassModal } from '../components/settings/AddClassModal';
 import { CheckIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 
@@ -227,6 +228,9 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {/* Storage Management */}
+      <StorageDashboard />
 
       {/* System Info */}
       <div className="card p-6">

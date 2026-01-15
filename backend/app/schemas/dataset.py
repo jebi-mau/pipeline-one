@@ -126,6 +126,8 @@ class DatasetResponse(BaseModel):
     total_files: int
     total_size_bytes: int
     prepared_files: int
+    output_size_bytes: int | None = None
+    output_size_formatted: str | None = None
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime

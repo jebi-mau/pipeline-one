@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from backend.app.models.curated_dataset import CuratedDataset
     from backend.app.models.dataset import Dataset
     from backend.app.models.job import ProcessingJob
 
@@ -40,6 +41,19 @@ class TrainingDataset(Base, UUIDMixin, TimestampMixin):
         index=True,
     )
     source_dataset: Mapped["Dataset | None"] = relationship()
+
+    # Optional link to curated dataset (for full lineage)
+    source_curated_dataset_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("curated_datasets.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_curated_dataset: Mapped["CuratedDataset | None"] = relationship(
+        "CuratedDataset",
+        foreign_keys=[source_curated_dataset_id],
+        back_populates="training_datasets",
+    )
 
     # Filter configuration (stored for reproducibility)
     filter_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

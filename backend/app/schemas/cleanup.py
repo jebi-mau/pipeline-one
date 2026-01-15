@@ -42,3 +42,41 @@ class CleanupResultResponse(BaseModel):
     deleted_size_human: str
     failed_count: int
     errors: list[str]
+
+
+class StorageSummaryResponse(BaseModel):
+    """Response for comprehensive storage summary."""
+
+    # Disk usage
+    disk_total_bytes: int
+    disk_used_bytes: int
+    disk_free_bytes: int
+    disk_total_formatted: str
+    disk_used_formatted: str
+    disk_free_formatted: str
+    disk_usage_percent: float
+
+    # Per-entity storage
+    total_jobs_storage_bytes: int
+    total_jobs_storage_formatted: str
+    total_datasets_storage_bytes: int
+    total_datasets_storage_formatted: str
+    total_training_datasets_bytes: int
+    total_training_datasets_formatted: str
+
+    # Warnings
+    warning: str | None = None
+    warning_level: str = "normal"  # "normal", "warning", "critical"
+
+
+class BackfillResponse(BaseModel):
+    """Response for storage backfill operation."""
+
+    jobs_found: int
+    jobs_updated: int
+    datasets_found: int = 0
+    datasets_updated: int = 0
+    total_size_bytes: int
+    total_size_formatted: str
+    dry_run: bool
+    errors: list[str]

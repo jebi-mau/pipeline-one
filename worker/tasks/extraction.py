@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import shutil
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,7 +15,7 @@ from PIL import Image
 from scipy import ndimage
 
 from worker.celery_app import app
-from worker.db import get_db_connection, update_job_progress
+from worker.db import get_db_connection, update_job_progress, record_stage_completion
 
 logger = logging.getLogger(__name__)
 
@@ -337,6 +338,9 @@ def extract_svo2(
 
     logger.info(f"Extracting SVO2: {svo2_file}")
 
+    # Track stage timing
+    stage_start_time = time.time()
+
     # Create output directory
     output_base = config.get("output_dir", f"data/output/{job_id}")
     svo2_name = Path(svo2_file).stem
@@ -448,6 +452,23 @@ def extract_svo2(
             )
             logger.info(f"Ingested {ingested_frames} frames into database")
 
+        # Record stage duration for benchmarking
+        # Note: Extraction may run multiple tasks in parallel for different files,
+        # so we record for each file. The overall extraction duration will be
+        # calculated from the longest-running extraction task.
+        stage_duration = time.time() - stage_start_time
+        record_stage_completion(
+            job_id=job_id,
+            stage="extraction",
+            duration_seconds=stage_duration,
+            total_frames=frames_kept,
+        )
+
+        logger.info(
+            f"Extraction complete: {frames_kept} frames in {stage_duration:.1f}s "
+            f"({frames_kept / stage_duration:.2f} fps)"
+        )
+
         return {
             "status": "completed",
             "svo2_file": svo2_file,
@@ -462,6 +483,7 @@ def extract_svo2(
             "original_filename": original_filename,
             "original_unix_timestamp": original_unix_timestamp,
             "dataset_file_id": dataset_file_id,
+            "duration_seconds": stage_duration,
         }
 
     except Exception as e:

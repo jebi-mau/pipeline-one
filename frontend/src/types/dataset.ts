@@ -54,6 +54,9 @@ export interface Dataset {
   total_files: number;
   total_size_bytes: number;
   prepared_files: number;
+  // Output storage tracking
+  output_size_bytes?: number | null;
+  output_size_formatted?: string | null;
   error_message: string | null;
   created_at: string;
   updated_at: string;

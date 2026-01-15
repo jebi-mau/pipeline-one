@@ -53,6 +53,9 @@ class Dataset(Base, UUIDMixin, TimestampMixin):
     total_size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     prepared_files: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Output storage tracking (populated after dataset preparation)
+    output_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
     # Error handling
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
