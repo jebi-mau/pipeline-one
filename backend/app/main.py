@@ -35,10 +35,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CORS middleware - allow all origins for VPN access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:3000"],
+    allow_origins=["*"],  # Allow any origin for remote VPN access
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

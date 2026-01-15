@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,  // Bind to all interfaces for remote access
     port: 3000,
     proxy: {
       '/api': {
