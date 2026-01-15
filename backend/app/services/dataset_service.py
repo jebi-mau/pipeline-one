@@ -362,15 +362,28 @@ class DatasetService:
         try:
             from processing.svo2.reader import SVO2Reader
 
-            with SVO2Reader(svo2_path) as reader:
+            reader = SVO2Reader(svo2_path)
+            if not reader.open():
+                raise RuntimeError(f"Failed to open SVO2 file: {svo2_path.name}")
+
+            try:
                 metadata = reader.get_metadata()
                 # Use serial number as camera_id
                 metadata["camera_id"] = str(metadata.get("serial_number", "unknown"))
                 return metadata
+            finally:
+                reader.close()
 
-        except ImportError:
-            # ZED SDK not available - return basic metadata
-            logger.warning("ZED SDK not available - using basic metadata")
+        except (ImportError, RuntimeError, Exception) as e:
+            # ZED SDK not available or failed - return basic metadata
+            error_msg = str(e)
+            if "CORRUPTED" in error_msg or "TensorRT" in error_msg:
+                logger.warning(f"ZED SDK corrupted - using basic metadata for {svo2_path.name}")
+            elif "ImportError" in type(e).__name__:
+                logger.warning("ZED SDK not available - using basic metadata")
+            else:
+                logger.warning(f"Failed to extract metadata from {svo2_path.name}: {e}")
+
             file_hash = self._calculate_file_hash(svo2_path)
             return {
                 "file_path": str(svo2_path),
