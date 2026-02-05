@@ -57,10 +57,11 @@ export function JobActions({ jobId, status, onDeleted, onReport, showDelete = fa
       {status === 'pending' && (
         <button
           onClick={handleStart}
-          className={`${buttonBase} bg-green-600/20 text-green-400 hover:bg-green-600/40`}
+          className={`${buttonBase} bg-green-600/20 text-green-400 hover:bg-green-600/40 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-secondary-900`}
           title="Start Job"
+          aria-label="Start job processing"
         >
-          <PlayIcon className={iconSize} />
+          <PlayIcon className={iconSize} aria-hidden="true" />
         </button>
       )}
 
@@ -68,17 +69,19 @@ export function JobActions({ jobId, status, onDeleted, onReport, showDelete = fa
         <>
           <button
             onClick={handlePause}
-            className={`${buttonBase} bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/40`}
+            className={`${buttonBase} bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/40 focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-secondary-900`}
             title="Pause Job"
+            aria-label="Pause job processing"
           >
-            <PauseIcon className={iconSize} />
+            <PauseIcon className={iconSize} aria-hidden="true" />
           </button>
           <button
             onClick={handleCancel}
-            className={`${buttonBase} bg-red-600/20 text-red-400 hover:bg-red-600/40`}
+            className={`${buttonBase} bg-red-600/20 text-red-400 hover:bg-red-600/40 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-secondary-900`}
             title="Cancel Job"
+            aria-label="Cancel job processing"
           >
-            <StopIcon className={iconSize} />
+            <StopIcon className={iconSize} aria-hidden="true" />
           </button>
         </>
       )}
@@ -87,17 +90,19 @@ export function JobActions({ jobId, status, onDeleted, onReport, showDelete = fa
         <>
           <button
             onClick={handleResume}
-            className={`${buttonBase} bg-green-600/20 text-green-400 hover:bg-green-600/40`}
+            className={`${buttonBase} bg-green-600/20 text-green-400 hover:bg-green-600/40 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-secondary-900`}
             title="Resume Job"
+            aria-label="Resume job processing"
           >
-            <PlayIcon className={iconSize} />
+            <PlayIcon className={iconSize} aria-hidden="true" />
           </button>
           <button
             onClick={handleCancel}
-            className={`${buttonBase} bg-red-600/20 text-red-400 hover:bg-red-600/40`}
+            className={`${buttonBase} bg-red-600/20 text-red-400 hover:bg-red-600/40 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-secondary-900`}
             title="Cancel Job"
+            aria-label="Cancel job processing"
           >
-            <StopIcon className={iconSize} />
+            <StopIcon className={iconSize} aria-hidden="true" />
           </button>
         </>
       )}
@@ -105,30 +110,33 @@ export function JobActions({ jobId, status, onDeleted, onReport, showDelete = fa
       {(status === 'failed' || status === 'cancelled') && (
         <button
           onClick={handleRestart}
-          className={`${buttonBase} bg-green-600/20 text-green-400 hover:bg-green-600/40`}
+          className={`${buttonBase} bg-green-600/20 text-green-400 hover:bg-green-600/40 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-secondary-900`}
           title="Restart Job"
+          aria-label="Restart job from beginning"
         >
-          <ArrowPathIcon className={iconSize} />
+          <ArrowPathIcon className={iconSize} aria-hidden="true" />
         </button>
       )}
 
       {showReport && (
         <button
           onClick={onReport}
-          className={`${buttonBase} bg-primary-600/20 text-primary-400 hover:bg-primary-600/40`}
+          className={`${buttonBase} bg-primary-600/20 text-primary-400 hover:bg-primary-600/40 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-secondary-900`}
           title="View Report"
+          aria-label="View job report"
         >
-          <DocumentChartBarIcon className={iconSize} />
+          <DocumentChartBarIcon className={iconSize} aria-hidden="true" />
         </button>
       )}
 
       {showDelete && (status === 'completed' || status === 'failed' || status === 'cancelled') && (
         <button
           onClick={handleDelete}
-          className={`${buttonBase} bg-red-600/20 text-red-400 hover:bg-red-600/40`}
+          className={`${buttonBase} bg-red-600/20 text-red-400 hover:bg-red-600/40 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-secondary-900`}
           title="Delete Job"
+          aria-label="Delete job and its output files"
         >
-          <TrashIcon className={iconSize} />
+          <TrashIcon className={iconSize} aria-hidden="true" />
         </button>
       )}
     </div>

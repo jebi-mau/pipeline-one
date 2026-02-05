@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 import random
 from datetime import datetime, timezone
 from pathlib import Path
@@ -89,7 +88,7 @@ def export_training_data(
 
         # Get matched annotations
         ann_query = select(ExternalAnnotation).where(
-            ExternalAnnotation.is_matched == True
+            ExternalAnnotation.is_matched.is_(True)
         )
         if labels_filter:
             ann_query = ann_query.where(ExternalAnnotation.label.in_(labels_filter))
@@ -190,7 +189,7 @@ def export_training_data(
         "val_count": len(val_ids),
         "test_count": len(test_ids),
         "total_annotations": sum(len(anns) for anns in frame_annotations.values()),
-        "labels": list(sorted(all_labels)),
+        "labels": sorted(all_labels),
         "label_map": label_to_id,
         "split_ratio": split_ratio,
     }
@@ -208,7 +207,7 @@ def export_training_data(
         "train_count": len(train_ids),
         "val_count": len(val_ids),
         "test_count": len(test_ids),
-        "labels": list(sorted(all_labels)),
+        "labels": sorted(all_labels),
     }
 
 
@@ -255,7 +254,7 @@ def _export_coco(
             if frame_id not in frames:
                 continue
 
-            frame = frames[frame_id]
+            _frame = frames[frame_id]  # Keep for potential future use
             anns = frame_annotations.get(frame_id, [])
 
             # Get dimensions from metadata or use defaults

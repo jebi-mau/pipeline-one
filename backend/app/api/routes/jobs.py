@@ -196,7 +196,9 @@ async def estimate_job_duration(
     """
     import os
     from pathlib import Path
-    from sqlalchemy import select, or_
+
+    from sqlalchemy import or_, select
+
     from backend.app.models.dataset import DatasetFile
 
     # Calculate total frames

@@ -101,7 +101,7 @@ async def browse_directory(
     try:
         items = sorted(browse_path.iterdir())
     except PermissionError:
-        raise HTTPException(status_code=403, detail="Permission denied to read directory")
+        raise HTTPException(status_code=403, detail="Permission denied to read directory") from None
 
     for item in items:
         # Skip hidden files/directories
@@ -232,7 +232,8 @@ async def get_frame_count(
         - total_frames: Sum of all frames across provided files
         - files: Per-file frame counts
     """
-    from sqlalchemy import select, or_
+    from sqlalchemy import or_, select
+
     from backend.app.models.dataset import DatasetFile
 
     allowed_roots = get_allowed_roots()

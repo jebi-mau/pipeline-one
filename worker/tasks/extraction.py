@@ -3,7 +3,6 @@
 import json
 import logging
 import re
-import shutil
 import time
 import uuid
 from datetime import datetime, timezone
@@ -15,7 +14,7 @@ from PIL import Image
 from scipy import ndimage
 
 from worker.celery_app import app
-from worker.db import get_db_connection, update_job_progress, record_stage_completion
+from worker.db import get_db_connection, record_stage_completion, update_job_progress
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ def compute_hash_similarity(hash1: str, hash2: str) -> float:
         return 0.0
     bits1 = bin(int(hash1, 16))[2:].zfill(len(hash1) * 4)
     bits2 = bin(int(hash2, 16))[2:].zfill(len(hash2) * 4)
-    diff_count = sum(b1 != b2 for b1, b2 in zip(bits1, bits2))
+    diff_count = sum(b1 != b2 for b1, b2 in zip(bits1, bits2, strict=True))
     return 1.0 - (diff_count / len(bits1))
 
 

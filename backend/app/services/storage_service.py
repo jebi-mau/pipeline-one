@@ -268,7 +268,7 @@ class StorageService:
         total_training_datasets_storage = result.scalar() or 0
 
         # Calculate other storage (not tracked in entities)
-        tracked_storage = total_jobs_storage + total_datasets_storage + total_training_datasets_storage
+        _tracked_storage = total_jobs_storage + total_datasets_storage + total_training_datasets_storage
 
         # Determine warning level
         free_gb = usage.free / (1024 ** 3)

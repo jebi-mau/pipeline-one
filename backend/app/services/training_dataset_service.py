@@ -2,14 +2,13 @@
 
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.app.models import Dataset, ProcessingJob
+from backend.app.models import ProcessingJob
 from backend.app.models.training_dataset import (
     TrainingDataset,
     TrainingDatasetFrame,

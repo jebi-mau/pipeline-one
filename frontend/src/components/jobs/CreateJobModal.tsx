@@ -84,6 +84,14 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultM
   // UI state
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Form validation state
+  const [validationErrors, setValidationErrors] = useState<{
+    jobName?: string;
+    files?: string;
+    classes?: string;
+    stages?: string;
+  }>({});
+
   const { data: filesData, isLoading: filesLoading, isError, refetch } = useBrowseFiles(currentPath, showAllFiles);
   const { data: classesData, isLoading: classesLoading } = useObjectClasses();
   const { data: modelInfo, isLoading: modelLoading } = useModelInfo();
@@ -209,6 +217,9 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultM
         ? prev.filter(f => f !== filePath)
         : [...prev, filePath]
     );
+    if (validationErrors.files) {
+      setValidationErrors(prev => ({ ...prev, files: undefined }));
+    }
   };
 
   const handleSelectClass = (className: string) => {
@@ -293,9 +304,26 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultM
   };
 
   const handleSubmit = async () => {
-    if (!jobName.trim() || selectedFiles.length === 0 || selectedClasses.length === 0 || selectedStages.length === 0) {
+    // Validate all fields
+    const errors: typeof validationErrors = {};
+    if (!jobName.trim()) {
+      errors.jobName = 'Job name is required';
+    }
+    if (selectedFiles.length === 0) {
+      errors.files = 'At least one SVO2 file must be selected';
+    }
+    if (selectedClasses.length === 0) {
+      errors.classes = 'At least one object class must be selected';
+    }
+    if (selectedStages.length === 0) {
+      errors.stages = 'At least one pipeline stage must be selected';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
       return;
     }
+    setValidationErrors({});
 
     try {
       const job = await createJob.mutateAsync({
@@ -409,10 +437,20 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultM
           <input
             type="text"
             value={jobName}
-            onChange={(e) => setJobName(e.target.value)}
-            placeholder="Enter job name..."
-            className="w-full px-3 py-2 bg-secondary-800 border border-secondary-700 rounded-lg text-secondary-100 placeholder-secondary-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            onChange={(e) => {
+              setJobName(e.target.value);
+              if (validationErrors.jobName) {
+                setValidationErrors(prev => ({ ...prev, jobName: undefined }));
+              }
+            }}
+            placeholder="e.g., office_scan_001_processing"
+            className={`w-full px-3 py-2 bg-secondary-800 border rounded-lg text-secondary-100 placeholder-secondary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 ${
+              validationErrors.jobName ? 'border-red-500' : 'border-secondary-700'
+            }`}
           />
+          {validationErrors.jobName && (
+            <p className="mt-1 text-sm text-red-400">{validationErrors.jobName}</p>
+          )}
         </div>
 
         {/* Dataset Source Info (when using preselected dataset) */}
@@ -642,6 +680,9 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultM
               </div>
             </div>
           )}
+          {validationErrors.files && (
+            <p className="mt-1 text-sm text-red-400">{validationErrors.files}</p>
+          )}
         </div>
 
         {/* Object Classes */}
@@ -666,8 +707,13 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultM
               classesData?.map((cls) => (
                 <button
                   key={cls.name}
-                  onClick={() => handleSelectClass(cls.name)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  onClick={() => {
+                    handleSelectClass(cls.name);
+                    if (validationErrors.classes) {
+                      setValidationErrors(prev => ({ ...prev, classes: undefined }));
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-secondary-900 ${
                     selectedClasses.includes(cls.name)
                       ? 'bg-primary-600 text-white'
                       : 'bg-secondary-700 text-secondary-300 hover:bg-secondary-600'
@@ -679,6 +725,9 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultM
               ))
             )}
           </div>
+          {validationErrors.classes && (
+            <p className="mt-1 text-sm text-red-400">{validationErrors.classes}</p>
+          )}
         </div>
 
         {/* Pipeline Stages Selection */}
@@ -701,8 +750,13 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultM
               return (
                 <button
                   key={stage}
-                  onClick={() => handleToggleStage(stage)}
-                  className={`flex items-start p-3 rounded-lg border transition-colors text-left ${
+                  onClick={() => {
+                    handleToggleStage(stage);
+                    if (validationErrors.stages) {
+                      setValidationErrors(prev => ({ ...prev, stages: undefined }));
+                    }
+                  }}
+                  className={`flex items-start p-3 rounded-lg border transition-colors text-left focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-secondary-900 ${
                     isSelected
                       ? 'bg-primary-900/30 border-primary-600 text-primary-100'
                       : 'bg-secondary-800 border-secondary-700 text-secondary-400 hover:border-secondary-600'
@@ -730,8 +784,8 @@ export function CreateJobModal({ isOpen, onClose, preselectedDatasetId, defaultM
               );
             })}
           </div>
-          {selectedStages.length === 0 && (
-            <p className="mt-2 text-xs text-red-400">At least one stage must be selected</p>
+          {validationErrors.stages && (
+            <p className="mt-2 text-sm text-red-400">{validationErrors.stages}</p>
           )}
         </div>
 

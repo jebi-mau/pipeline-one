@@ -32,7 +32,7 @@ async def create_curated_dataset(
     try:
         return await service.create(data)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
 
 @router.get("", response_model=CuratedDatasetListPaginated)

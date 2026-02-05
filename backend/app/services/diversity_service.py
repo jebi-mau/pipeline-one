@@ -54,7 +54,7 @@ def compute_hash_similarity(hash1: str, hash2: str) -> float:
     bits2 = bin(int(hash2, 16))[2:].zfill(len(hash2) * 4)
 
     # Count differing bits
-    diff_count = sum(b1 != b2 for b1, b2 in zip(bits1, bits2))
+    diff_count = sum(b1 != b2 for b1, b2 in zip(bits1, bits2, strict=True))
 
     # Return similarity (1 - normalized distance)
     return 1.0 - (diff_count / len(bits1))

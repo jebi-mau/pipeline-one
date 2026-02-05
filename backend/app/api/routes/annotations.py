@@ -51,7 +51,7 @@ async def import_annotations(
             match_by=request.match_by,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
 
 @router.get(

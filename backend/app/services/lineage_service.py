@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.app.models.dataset import Dataset, DatasetFile
 from backend.app.models.external_annotation import AnnotationImport, ExternalAnnotation
-from backend.app.models.frame import Frame, FrameMetadata
+from backend.app.models.frame import Frame
 from backend.app.models.job import ProcessingJob
 from backend.app.models.lineage import DataLineageEvent
 

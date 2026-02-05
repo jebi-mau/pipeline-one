@@ -262,7 +262,7 @@ def run_reconstruction(
             if detections_modified:
                 with open(detections_file, "w") as f:
                     json.dump(detections_data, f, indent=2)
-                logger.info(f"Updated detections.json with distance values")
+                logger.info("Updated detections.json with distance values")
 
         logger.info(f"Reconstruction complete: {total_objects} 3D objects in {total_frames} frames")
 

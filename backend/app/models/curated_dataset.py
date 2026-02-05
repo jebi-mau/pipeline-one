@@ -1,13 +1,11 @@
 """Curated dataset model - snapshot of review filtering for reproducible exports."""
 
 import uuid
-from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import ForeignKey
 
 from backend.app.models.base import Base, TimestampMixin, UUIDMixin
 

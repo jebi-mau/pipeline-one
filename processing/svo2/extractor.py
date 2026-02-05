@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import cv2
 import numpy as np
 
-from processing.svo2.reader import CameraCalibration, FrameData, SVO2Reader
+from processing.svo2.reader import FrameData, SVO2Reader
 
 logger = logging.getLogger(__name__)
 
@@ -455,7 +455,7 @@ class SVO2Extractor:
 
                     lines = [
                         f"{p[0]:.6f} {p[1]:.6f} {p[2]:.6f} {r} {g} {b}\n"
-                        for p, r, g, b in zip(batch_points, batch_r, batch_g, batch_b)
+                        for p, r, g, b in zip(batch_points, batch_r, batch_g, batch_b, strict=True)
                     ]
                     f.writelines(lines)
             else:

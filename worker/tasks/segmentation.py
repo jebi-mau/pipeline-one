@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from worker.celery_app import app
-from worker.db import update_job_progress, record_stage_completion
+from worker.db import record_stage_completion, update_job_progress
 
 logger = logging.getLogger(__name__)
 

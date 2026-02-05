@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 # Check for SAM 3 availability
 try:
-    from sam3.model_builder import build_sam3_image_model
     from sam3.model.sam3_image_processor import Sam3Processor
+    from sam3.model_builder import build_sam3_image_model
     SAM3_AVAILABLE = True
 except ImportError:
     SAM3_AVAILABLE = False
@@ -196,6 +196,7 @@ class SAM3Predictor:
             return result
 
         import time
+
         from PIL import Image
         start_time = time.perf_counter()
 
@@ -224,7 +225,7 @@ class SAM3Predictor:
                     scores = output.get("scores", [])
 
                     # Process each detection
-                    for i, (mask, box, score) in enumerate(zip(masks, boxes, scores)):
+                    for _idx, (mask, box, score) in enumerate(zip(masks, boxes, scores, strict=False)):
                         if score < self.config.confidence_threshold:
                             continue
 
@@ -309,7 +310,7 @@ class SAM3Predictor:
         boxes = output.get("boxes", [])
         scores = output.get("scores", [])
 
-        for mask, box, score in zip(masks, boxes, scores):
+        for mask, box, score in zip(masks, boxes, scores, strict=False):
             if score < self.config.confidence_threshold:
                 continue
 

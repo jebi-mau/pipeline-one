@@ -128,18 +128,18 @@ class BBox3D:
             Array of shape (8, 3) with corner coordinates
         """
         # Half dimensions
-        l, w, h = self.length / 2, self.width / 2, self.height / 2
+        half_l, half_w, half_h = self.length / 2, self.width / 2, self.height / 2
 
         # Corners in object coordinate system
         corners = np.array([
-            [-l, -w, -h],
-            [l, -w, -h],
-            [l, w, -h],
-            [-l, w, -h],
-            [-l, -w, h],
-            [l, -w, h],
-            [l, w, h],
-            [-l, w, h],
+            [-half_l, -half_w, -half_h],
+            [half_l, -half_w, -half_h],
+            [half_l, half_w, -half_h],
+            [-half_l, half_w, -half_h],
+            [-half_l, -half_w, half_h],
+            [half_l, -half_w, half_h],
+            [half_l, half_w, half_h],
+            [-half_l, half_w, half_h],
         ], dtype=np.float32)
 
         # Rotation matrix around Y axis

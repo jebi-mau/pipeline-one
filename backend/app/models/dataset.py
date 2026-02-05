@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -144,4 +144,10 @@ class DatasetFile(Base, UUIDMixin, TimestampMixin):
     # Note: Using 'extra_metadata' as attribute name since 'metadata' is reserved in SQLAlchemy
     extra_metadata: Mapped[dict | None] = mapped_column(
         "metadata", JSONB, nullable=True
+    )
+
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index("ix_dataset_files_dataset_status", "dataset_id", "status"),
+        Index("ix_dataset_files_dataset_camera", "dataset_id", "camera_id"),
     )

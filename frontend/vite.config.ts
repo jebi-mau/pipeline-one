@@ -23,5 +23,6 @@ export default defineConfig({
         ws: true,
       },
     },
+    hmr: false,  // Disabled for stable remote VPN access
   },
 })

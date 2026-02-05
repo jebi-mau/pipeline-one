@@ -6,12 +6,10 @@ import os
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from backend.app.models.dataset import Dataset
 from backend.app.models.external_annotation import AnnotationImport, ExternalAnnotation
@@ -24,7 +22,6 @@ from backend.app.schemas.annotation import (
     ExternalAnnotationDetail,
     ExternalAnnotationSummary,
     FrameAnnotationsResponse,
-    TrainingExportResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,11 +109,11 @@ class AnnotationService:
             annotation_import.import_metadata = {
                 "source_tool": source_tool,
                 "source_format": source_format,
-                "labels": list(set(
+                "labels": list({
                     ann["label"]
                     for anns in annotations_data.values()
                     for ann in anns
-                )),
+                }),
             }
 
             await self.db.commit()
@@ -497,7 +494,7 @@ class AnnotationService:
         )
 
         if matched_only:
-            query = query.where(ExternalAnnotation.is_matched == True)
+            query = query.where(ExternalAnnotation.is_matched.is_(True))
         if label:
             query = query.where(ExternalAnnotation.label == label)
             count_query = count_query.where(ExternalAnnotation.label == label)
@@ -509,7 +506,7 @@ class AnnotationService:
         matched_count_result = await self.db.execute(
             select(func.count(ExternalAnnotation.id))
             .where(ExternalAnnotation.import_id == import_id)
-            .where(ExternalAnnotation.is_matched == True)
+            .where(ExternalAnnotation.is_matched.is_(True))
         )
         matched = matched_count_result.scalar() or 0
         unmatched = total - matched

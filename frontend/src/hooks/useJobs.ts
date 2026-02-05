@@ -66,7 +66,24 @@ export function useStartJob() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (jobId: string) => jobsService.start(jobId),
-    onSuccess: (_, jobId) => {
+    onMutate: async (jobId) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: jobKeys.detail(jobId) });
+      // Snapshot previous value
+      const previousJob = queryClient.getQueryData(jobKeys.detail(jobId));
+      // Optimistically update to running
+      queryClient.setQueryData(jobKeys.detail(jobId), (old: any) =>
+        old ? { ...old, status: 'running' } : old
+      );
+      return { previousJob };
+    },
+    onError: (_, jobId, context) => {
+      // Rollback on error
+      if (context?.previousJob) {
+        queryClient.setQueryData(jobKeys.detail(jobId), context.previousJob);
+      }
+    },
+    onSettled: (_, __, jobId) => {
       queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId) });
       queryClient.invalidateQueries({ queryKey: jobKeys.lists() });
     },
@@ -77,7 +94,20 @@ export function usePauseJob() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (jobId: string) => jobsService.pause(jobId),
-    onSuccess: (_, jobId) => {
+    onMutate: async (jobId) => {
+      await queryClient.cancelQueries({ queryKey: jobKeys.detail(jobId) });
+      const previousJob = queryClient.getQueryData(jobKeys.detail(jobId));
+      queryClient.setQueryData(jobKeys.detail(jobId), (old: any) =>
+        old ? { ...old, status: 'paused' } : old
+      );
+      return { previousJob };
+    },
+    onError: (_, jobId, context) => {
+      if (context?.previousJob) {
+        queryClient.setQueryData(jobKeys.detail(jobId), context.previousJob);
+      }
+    },
+    onSettled: (_, __, jobId) => {
       queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId) });
       queryClient.invalidateQueries({ queryKey: jobKeys.lists() });
     },
@@ -88,7 +118,20 @@ export function useResumeJob() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (jobId: string) => jobsService.resume(jobId),
-    onSuccess: (_, jobId) => {
+    onMutate: async (jobId) => {
+      await queryClient.cancelQueries({ queryKey: jobKeys.detail(jobId) });
+      const previousJob = queryClient.getQueryData(jobKeys.detail(jobId));
+      queryClient.setQueryData(jobKeys.detail(jobId), (old: any) =>
+        old ? { ...old, status: 'running' } : old
+      );
+      return { previousJob };
+    },
+    onError: (_, jobId, context) => {
+      if (context?.previousJob) {
+        queryClient.setQueryData(jobKeys.detail(jobId), context.previousJob);
+      }
+    },
+    onSettled: (_, __, jobId) => {
       queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId) });
       queryClient.invalidateQueries({ queryKey: jobKeys.lists() });
     },
@@ -99,7 +142,20 @@ export function useCancelJob() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (jobId: string) => jobsService.cancel(jobId),
-    onSuccess: (_, jobId) => {
+    onMutate: async (jobId) => {
+      await queryClient.cancelQueries({ queryKey: jobKeys.detail(jobId) });
+      const previousJob = queryClient.getQueryData(jobKeys.detail(jobId));
+      queryClient.setQueryData(jobKeys.detail(jobId), (old: any) =>
+        old ? { ...old, status: 'cancelled' } : old
+      );
+      return { previousJob };
+    },
+    onError: (_, jobId, context) => {
+      if (context?.previousJob) {
+        queryClient.setQueryData(jobKeys.detail(jobId), context.previousJob);
+      }
+    },
+    onSettled: (_, __, jobId) => {
       queryClient.invalidateQueries({ queryKey: jobKeys.detail(jobId) });
       queryClient.invalidateQueries({ queryKey: jobKeys.lists() });
     },

@@ -3,22 +3,21 @@
 import logging
 from pathlib import Path
 from typing import Any
-from uuid import UUID
 
-from celery import chain, chord, group
+from celery import chain, group
 
 from worker.celery_app import app
 from worker.db import (
-    update_job_status,
-    update_job_progress,
-    get_job_performance_data,
-    update_performance_benchmark,
     get_job_output_directory,
+    get_job_performance_data,
+    update_job_progress,
+    update_job_status,
     update_job_storage_size,
+    update_performance_benchmark,
 )
 from worker.tasks.extraction import extract_svo2
-from worker.tasks.segmentation import run_segmentation
 from worker.tasks.reconstruction import run_reconstruction
+from worker.tasks.segmentation import run_segmentation
 from worker.tasks.tracking import run_tracking
 
 logger = logging.getLogger(__name__)

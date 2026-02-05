@@ -1,6 +1,6 @@
 """3D reconstruction module for bounding box estimation."""
 
-from processing.reconstruction.bbox_estimator import BBox3DEstimator, BBox3D
+from processing.reconstruction.bbox_estimator import BBox3D, BBox3DEstimator
 from processing.reconstruction.depth_projection import DepthProjector
 from processing.reconstruction.point_cloud import PointCloudProcessor
 

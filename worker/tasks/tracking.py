@@ -42,9 +42,9 @@ def run_tracking(
     Returns:
         Tracking result summary
     """
+    from processing.svo2.frame_registry import FrameRegistry
     from processing.tracking.bytetrack import ByteTrackConfig
     from processing.tracking.track_manager import TrackManager
-    from processing.svo2.frame_registry import FrameRegistry
 
     logger.info(f"Running tracking for job {job_id}")
 
@@ -138,7 +138,7 @@ def run_tracking(
 
                         # Parse KITTI format
                         class_name = parts[0]
-                        h, w, l = map(float, parts[8:11])
+                        h, w, length = map(float, parts[8:11])
                         x, y, z = map(float, parts[11:14])
                         rotation_y = float(parts[14])
 
@@ -146,7 +146,7 @@ def run_tracking(
                         score = float(parts[15]) if len(parts) > 15 else 0.8
 
                         detections.append({
-                            "bbox_3d": (x, y, z, w, h, l, rotation_y),
+                            "bbox_3d": (x, y, z, w, h, length, rotation_y),
                             "class_id": class_name.lower(),
                             "class_name": class_name,
                             "score": score,
@@ -154,7 +154,7 @@ def run_tracking(
 
                 # Update tracker
                 if detections:
-                    tracks = track_manager.update(
+                    _tracks = track_manager.update(
                         detections,
                         frame.sequence_index,
                         frame.timestamp_ns,

@@ -3,18 +3,19 @@
 import json
 import logging
 import os
+from collections.abc import Iterator
+from functools import lru_cache
 from pathlib import Path
-from typing import Iterator
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.models.job import ProcessingJob, JobConfig
+from backend.app.models.job import JobConfig, ProcessingJob
 from backend.app.schemas.data import (
     AnnotationSummary,
     BBox2D,
-    BBox3D,
     CorrelationEntry,
     CorrelationTableResponse,
     DataSummary,
@@ -26,6 +27,28 @@ from backend.app.schemas.data import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=128)
+def _load_frame_registry_cached(registry_path: str, mtime: float) -> dict[str, Any]:
+    """Load frame registry with caching based on file path and modification time.
+
+    The mtime parameter ensures the cache is invalidated when the file changes.
+    """
+    with open(registry_path) as f:
+        return json.load(f)
+
+
+def load_frame_registry(registry_path: Path) -> dict[str, Any] | None:
+    """Load frame registry with caching."""
+    if not registry_path.exists():
+        return None
+    try:
+        mtime = registry_path.stat().st_mtime
+        return _load_frame_registry_cached(str(registry_path), mtime)
+    except Exception as e:
+        logger.warning(f"Failed to load frame registry {registry_path}: {e}")
+        return None
 
 # Base output directory (configurable via environment)
 OUTPUT_BASE = Path(os.getenv("PIPELINE_OUTPUT_DIR", "data/output"))
@@ -80,13 +103,11 @@ class DataService:
                 continue
 
             registry_file = seq_dir / "frame_registry.json"
-            if not registry_file.exists():
+            registry = load_frame_registry(registry_file)
+            if registry is None:
                 continue
 
             try:
-                with open(registry_file) as f:
-                    registry = json.load(f)
-
                 frames = registry.get("frames", [])
                 total_frames += len(frames)
 
@@ -161,13 +182,11 @@ class DataService:
                 continue
 
             registry_file = seq_dir / "frame_registry.json"
-            if not registry_file.exists():
+            registry = load_frame_registry(registry_file)
+            if registry is None:
                 continue
 
             try:
-                with open(registry_file) as f:
-                    registry = json.load(f)
-
                 svo2_file = registry.get("svo2_file", seq_dir.name)
 
                 for frame in registry.get("frames", []):
@@ -223,7 +242,7 @@ class DataService:
         frames_collected: list[tuple[int, FrameSummary]] = []
         current_index = 0
 
-        for frame, svo2_file, seq_dir in self._iter_frames_from_registry(job_id, output_dir):
+        for frame, svo2_file, _seq_dir in self._iter_frames_from_registry(job_id, output_dir):
             seq_idx = frame.get("sequence_index", 0)
 
             # Only process frames in the requested range

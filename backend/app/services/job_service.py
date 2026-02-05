@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.config import get_settings
 from backend.app.constants import DEFAULT_PIPELINE_STAGES
 from backend.app.models.job import JobConfig, ProcessingJob
-from worker.tasks.orchestrator import run_pipeline
 from backend.app.schemas.job import (
     JobConfig as JobConfigSchema,
+)
+from backend.app.schemas.job import (
     JobCreate,
     JobResponse,
     JobResultsResponse,
@@ -22,6 +23,7 @@ from backend.app.schemas.job import (
     JobStatusUpdate,
     StageETA,
 )
+from worker.tasks.orchestrator import run_pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -540,7 +542,7 @@ class JobService:
 
         # For completed jobs, show elapsed times
         if job.status == "completed":
-            total_elapsed = (
+            _total_elapsed = (
                 int((job.completed_at - job.started_at).total_seconds())
                 if job.completed_at and job.started_at
                 else None

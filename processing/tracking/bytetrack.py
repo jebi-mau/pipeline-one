@@ -148,10 +148,10 @@ class STrack:
         Returns:
             New STrack instance
         """
-        x, y, z, w, h, l, rot = bbox_3d
+        x, y, z, w, h, length, rot = bbox_3d
 
         # Initialize Kalman filter state
-        state = np.array([x, y, z, 0, 0, 0, w, h, l], dtype=np.float64)
+        state = np.array([x, y, z, 0, 0, 0, w, h, length], dtype=np.float64)
         covariance = np.eye(9) * 0.1
 
         kalman = KalmanFilter(state=state, covariance=covariance)
@@ -189,10 +189,10 @@ class STrack:
             frame_id: Current frame index
             score: Detection confidence
         """
-        x, y, z, w, h, l, rot = bbox_3d
+        x, y, z, w, h, length, rot = bbox_3d
 
         if self.kalman is not None:
-            measurement = np.array([x, y, z, w, h, l], dtype=np.float64)
+            measurement = np.array([x, y, z, w, h, length], dtype=np.float64)
             self.kalman.update(measurement)
 
         self.bbox_3d = bbox_3d
@@ -443,7 +443,7 @@ class ByteTracker:
         unmatched_tracks = list(range(len(tracks)))
         unmatched_dets = list(range(len(detections)))
 
-        for row, col in zip(row_indices, col_indices):
+        for row, col in zip(row_indices, col_indices, strict=True):
             if cost_matrix[row, col] <= 1 - self.config.match_thresh:
                 matches.append((row, col))
                 unmatched_tracks.remove(row)
@@ -511,7 +511,7 @@ class ByteTracker:
         t_pos = track.get_position()
         d_pos = bbox_3d[:3]
 
-        distance = np.sqrt(sum((t - d) ** 2 for t, d in zip(t_pos, d_pos)))
+        distance = np.sqrt(sum((t - d) ** 2 for t, d in zip(t_pos, d_pos, strict=True)))
 
         # Normalize: assume max relevant distance is 50m
         max_dist = 50.0

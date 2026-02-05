@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterator
 
 import cv2
 import numpy as np
 import torch
 
-from processing.sam3.predictor import Detection, SAM3Config, SAM3Predictor, SegmentationResult
+from processing.sam3.predictor import SAM3Predictor, SegmentationResult
 from processing.svo2.frame_registry import FrameEntry, FrameRegistry
 
 logger = logging.getLogger(__name__)

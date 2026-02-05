@@ -14,7 +14,6 @@ from backend.app.schemas.review import (
     AnnotationStatsResponse,
     DiversityAnalysisRequest,
     DiversityAnalysisResponse,
-    FrameBatchRequest,
     FrameBatchResponse,
     TrainingDatasetDetail,
     TrainingDatasetListResponse,
@@ -53,10 +52,10 @@ async def get_annotation_stats(
         service = ReviewService(db)
         return await service.get_annotation_stats(job_id)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from None
     except Exception as e:
         logger.error(f"Error getting annotation stats: {e}")
-        raise HTTPException(status_code=500, detail="Failed to get annotation statistics")
+        raise HTTPException(status_code=500, detail="Failed to get annotation statistics") from None
 
 
 # =============================================================================
@@ -83,7 +82,7 @@ async def get_frames_batch(
         service = ReviewService(db)
         return await service.get_frame_batch(job_id, start_index, count)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from None
 
 
 # =============================================================================
@@ -118,10 +117,10 @@ async def analyze_frame_diversity(
             camera=request.sample_camera,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from None
     except Exception as e:
         logger.error(f"Error analyzing diversity: {e}")
-        raise HTTPException(status_code=500, detail="Failed to analyze frame diversity")
+        raise HTTPException(status_code=500, detail="Failed to analyze frame diversity") from None
 
 
 @router.get(
@@ -157,7 +156,7 @@ async def get_diversity_status(
             status="pending" if not cache else cache.status,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from None
 
 
 # =============================================================================
@@ -218,10 +217,10 @@ async def create_training_dataset(
             created_at=dataset.created_at,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
     except Exception as e:
         logger.error(f"Error creating training dataset: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create training dataset")
+        raise HTTPException(status_code=500, detail="Failed to create training dataset") from None
 
 
 @router.get(

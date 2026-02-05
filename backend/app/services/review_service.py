@@ -2,7 +2,6 @@
 
 import logging
 from collections import defaultdict
-from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import select

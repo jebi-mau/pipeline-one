@@ -1,8 +1,6 @@
 """Data-related Pydantic schemas for frame browsing and correlation."""
 
 from datetime import datetime
-from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel, Field
 

@@ -50,7 +50,7 @@ def prepare_dataset_files(self, dataset_id: str) -> dict:
             raise ValueError(f"Dataset {dataset_id} not found")
 
         # Get dataset as dict-like object
-        dataset_name = dataset_row.name
+        _dataset_name = dataset_row.name  # Reserved for future use
         output_directory = dataset_row.output_directory
         status = dataset_row.status
 

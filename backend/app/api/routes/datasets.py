@@ -11,7 +11,6 @@ from backend.app.schemas.dataset import (
     DatasetCamerasResponse,
     DatasetCreate,
     DatasetDetailResponse,
-    DatasetFileDetail,
     DatasetListResponse,
     DatasetPrepareRequest,
     DatasetPrepareResponse,
@@ -133,7 +132,7 @@ async def scan_folder(
             extract_metadata=request.extract_metadata,
         )
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from None
 
 
 @router.post("/{dataset_id}/prepare", response_model=DatasetPrepareResponse)
@@ -164,7 +163,7 @@ async def prepare_files(
 
         return result
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from None
 
 
 @router.get("/{dataset_id}/files")
@@ -248,8 +247,8 @@ async def extract_all_files(
     file_paths = [f.renamed_path or f.original_path for f in files if f.renamed_path or f.original_path]
 
     # Create job configuration
-    from backend.app.services.job_service import JobService
     from backend.app.schemas.job import JobCreate
+    from backend.app.services.job_service import JobService
 
     job_service = JobService(db)
     job = await job_service.create_job(
@@ -312,8 +311,8 @@ async def export_training_data(
         )
 
     # Create export task
-    from backend.app.services.export_service import ExportService
     from backend.app.schemas.export import ExportRequest
+    from backend.app.services.export_service import ExportService
 
     export_service = ExportService(db)
     export = await export_service.create_export(
@@ -348,6 +347,7 @@ async def list_annotation_imports(
     List all annotation imports for a dataset.
     """
     from sqlalchemy import select
+
     from backend.app.models.external_annotation import AnnotationImport
 
     query = (

@@ -1,7 +1,6 @@
 """Service for managing job performance benchmarks and pre-job time estimation."""
 
 import logging
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

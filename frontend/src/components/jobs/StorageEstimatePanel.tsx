@@ -5,7 +5,7 @@
  * with warnings if disk space is low.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   CircleStackIcon,
   ExclamationTriangleIcon,
@@ -49,13 +49,7 @@ export function StorageEstimatePanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (totalFrames > 0 && stagesToRun.length > 0) {
-      loadEstimate();
-    }
-  }, [totalFrames, stagesToRun, frameSkip, extractPointClouds, extractRightImage, extractMasks, imageFormat]);
-
-  const loadEstimate = async () => {
+  const loadEstimate = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -75,7 +69,13 @@ export function StorageEstimatePanel({
     } finally {
       setLoading(false);
     }
-  };
+  }, [totalFrames, stagesToRun, frameSkip, extractPointClouds, extractRightImage, extractMasks, imageFormat]);
+
+  useEffect(() => {
+    if (totalFrames > 0 && stagesToRun.length > 0) {
+      loadEstimate();
+    }
+  }, [totalFrames, stagesToRun, frameSkip, extractPointClouds, extractRightImage, extractMasks, imageFormat, loadEstimate]);
 
   // Don't show anything if no frames
   if (totalFrames <= 0) {
